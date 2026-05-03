@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ai",
+  "description": "Feature-building skill book: scope → slice → execute → ship.",
+  "owner": {
+    "name": "Nuno Alexandre",
+    "url": "https://github.com/namadnuno"
+  },
+  "plugins": [
+    {
+      "name": "ai",
+      "description": "grill-me, slice-it, review-it, ship-it — full feature cycle skills.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}
