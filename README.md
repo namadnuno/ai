@@ -1,6 +1,6 @@
 # ai — Feature-Building Skill Book
 
-Nine skills covering the full cycle from ticket intake to QA: **groom → scope → slice → execute → refactor → ship → test**.
+Ten skills covering the full cycle from ticket intake to QA: **groom → scope → slice → execute → refactor → ship → test**.
 
 ## Install
 
@@ -34,6 +34,7 @@ Run these on every machine. That's it. To update:
 | `qa-it` | "qa this", "what should I test", "qa checklist" | Grouped human QA checklist from git diff |
 | `refactor-it` | "this file is too big", "refactor this", "split this component" | Slice-it compatible refactor plan |
 | `write-skill` | "write a skill", "create a skill", "add a skill for X" | Ready-to-commit SKILL.md + README update |
+| `missing-it` | "what am I missing", "what's not covered", "am I forgetting anything" | Prioritized gaps list: tests, edge cases, error paths |
 
 Skills auto-trigger from natural language — no need to invoke by name. Force with `use grill-me` if auto-trigger misses.
 
