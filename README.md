@@ -1,6 +1,6 @@
 # ai — Feature-Building Skill Book
 
-Six skills covering the full cycle from ticket intake to QA: **groom → scope → slice → execute → ship → test**.
+Nine skills covering the full cycle from ticket intake to QA: **groom → scope → slice → execute → refactor → ship → test**.
 
 ## Install
 
@@ -32,6 +32,8 @@ Run these on every machine. That's it. To update:
 | `review-it` | "review this", "check the code", "did the agent do this right" | Blockers / Should-fix / Nits |
 | `ship-it` | "ship it", "wrap this up", "write the PR" | Test suite + commits + PR description |
 | `qa-it` | "qa this", "what should I test", "qa checklist" | Grouped human QA checklist from git diff |
+| `refactor-it` | "this file is too big", "refactor this", "split this component" | Slice-it compatible refactor plan |
+| `write-skill` | "write a skill", "create a skill", "add a skill for X" | Ready-to-commit SKILL.md + README update |
 
 Skills auto-trigger from natural language — no need to invoke by name. Force with `use grill-me` if auto-trigger misses.
 
@@ -41,4 +43,4 @@ Skills auto-trigger from natural language — no need to invoke by name. Force w
 ticket → grooming-it → grill-me → slice-it → [agent executes slice → review-it] × N → ship-it → qa-it
 ```
 
-`grooming-it` and `qa-it` are standalone — invoke anytime, independent of the main flow.
+`grooming-it`, `qa-it`, and `refactor-it` are standalone — invoke anytime, independent of the main flow.
