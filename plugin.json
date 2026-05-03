@@ -1,0 +1,13 @@
+{
+  "name": "ai",
+  "version": "1.0.0",
+  "description": "Feature-building skill book: scope → slice → execute → ship.",
+  "author": {
+    "name": "Nuno Alexandre",
+    "url": "https://github.com/namadnuno"
+  },
+  "homepage": "https://github.com/namadnuno/ai",
+  "repository": "https://github.com/namadnuno/ai",
+  "license": "MIT",
+  "skills": "./skills/"
+}
