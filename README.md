@@ -9,6 +9,13 @@ Four skills covering the full cycle of a small feature with an agent: **scope â†
 /plugin install feature-dev@namadnuno
 ```
 
+If SSH isn't configured for GitHub, use HTTPS instead:
+
+```
+/plugin marketplace add https://github.com/namadnuno/ai.git
+/plugin install feature-dev@namadnuno
+```
+
 Run these on every machine. That's it. To update:
 
 ```
