@@ -5,10 +5,15 @@ Four skills covering the full cycle of a small feature with an agent: **scope �
 ## Install
 
 ```
-/plugins install github:namadnuno/ai
+/plugin marketplace add namadnuno/ai
+/plugin install feature-dev@namadnuno
 ```
 
-Run this on every machine. That's it.
+Run these on every machine. That's it. To update:
+
+```
+/plugin marketplace update namadnuno
+```
 
 ## Skills
 
@@ -25,10 +30,4 @@ Skills auto-trigger from natural language — no need to invoke by name. Force w
 
 ```
 idea → grill-me → slice-it → [agent executes slice → review-it] × N → ship-it
-```
-
-## Update
-
-```
-/plugins update ai
 ```
