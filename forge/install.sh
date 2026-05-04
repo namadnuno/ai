@@ -37,7 +37,18 @@ git -C "$TMP" sparse-checkout set forge
 cp -r "$TMP/forge" "$DEST"
 chmod +x "$DEST/run.sh" "$DEST/start.sh" "$DEST/review.sh" "$DEST/orchestrate.sh" 2>/dev/null || true
 
+# Hide from git locally — no .gitignore change, no repo trace
+EXCLUDE="$(git rev-parse --git-dir)/info/exclude"
+mkdir -p "$(dirname "$EXCLUDE")"
+grep -qxF '.agent/' "$EXCLUDE" 2>/dev/null || echo '.agent/' >> "$EXCLUDE"
+grep -qxF '.agent.queue/' "$EXCLUDE" 2>/dev/null || echo '.agent.queue/' >> "$EXCLUDE"
+grep -qxF '.agent.logs/' "$EXCLUDE" 2>/dev/null || echo '.agent.logs/' >> "$EXCLUDE"
+grep -qxF '.agent.Dockerfile' "$EXCLUDE" 2>/dev/null || echo '.agent.Dockerfile' >> "$EXCLUDE"
+grep -qxF '.agent.md' "$EXCLUDE" 2>/dev/null || echo '.agent.md' >> "$EXCLUDE"
+grep -qxF '.agent.config' "$EXCLUDE" 2>/dev/null || echo '.agent.config' >> "$EXCLUDE"
+
 print_ok "forge installed → .agent/"
+print_ok "hidden from git via .git/info/exclude (no .gitignore changes)"
 echo ""
 echo -e "  ${BOLD}Next:${RESET}"
 echo -e "    ./.agent/run.sh       — interactive single-agent run"
