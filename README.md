@@ -1,6 +1,8 @@
 # ai — Feature-Building Skill Book
 
-Eleven skills covering the full cycle from ticket intake to QA: **groom → scope → slice → execute → refactor → ship → test**.
+Skills covering the full cycle from ticket intake to QA: **groom → scope → slice → execute → refactor → ship → test**.
+
+Also includes **Forge** — a portable AFK agent pipeline that runs Claude agents in Docker, with a dependency-aware queue and branch review TUI.
 
 ## Install
 
@@ -36,6 +38,8 @@ Run these on every machine. That's it. To update:
 | `write-skill` | "write a skill", "create a skill", "add a skill for X" | Ready-to-commit SKILL.md + README update |
 | `missing-it` | "what am I missing", "what's not covered", "am I forgetting anything" | Prioritized gaps list: tests, edge cases, error paths |
 | `tdd` | "use TDD", "test-first", "red-green-refactor", "write tests before code" | Red→green→refactor loop with behavior checklist |
+| `grill-agents` | "queue this for agents", "split this for subagents", "create agent specs" | Spec files written to `.agent.queue/pending/` |
+| `forge-init` | "init forge", "setup forge", "generate dockerfile for agents" | `.agent.Dockerfile` + `.agent.md` for current project/app |
 
 Skills auto-trigger from natural language — no need to invoke by name. Force with `use grill-me` if auto-trigger misses.
 
@@ -46,3 +50,26 @@ ticket → grooming-it → grill-me → slice-it → [agent executes slice → r
 ```
 
 `grooming-it`, `qa-it`, and `refactor-it` are standalone — invoke anytime, independent of the main flow.
+
+## Forge — AFK Agent Pipeline
+
+Drop isolated Docker agents into any project. Agents run unattended, work queued across sessions.
+
+```bash
+# Install into any repo (one-liner)
+curl -fsSL https://raw.githubusercontent.com/namadnuno/ai/main/forge/install.sh | bash
+
+# Generate project config
+/forge-init
+
+# Split work into agent specs (via skill)
+/grill-agents
+
+# Run agents AFK
+./.agent/start.sh
+
+# Review + merge branches
+./.agent/review.sh
+```
+
+See [`forge/README.md`](forge/README.md) for full docs.
