@@ -42,3 +42,5 @@ Three buckets:
 - **Nits** — naming, comments, ordering. Optional.
 
 Format each finding: `file:line — what's wrong — suggested fix`. End with check status: tests ✓/✗, typecheck ✓/✗, lint ✓/✗, build ✓/✗.
+
+If all slices done and zero blockers: delete `PLAN.md` if it exists.

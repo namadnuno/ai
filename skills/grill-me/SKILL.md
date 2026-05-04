@@ -46,4 +46,4 @@ Build plan when questions resolved or deferred:
 
 Then offer:
 > **"go"** → implement inline (cohesive, single session)
-> **"plan"** → write PLAN.md and stop (multi-session, large scope, subagent)
+> **"plan"** → write build plan to `PLAN.md` and stop (multi-session, large scope, subagent)

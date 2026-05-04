@@ -48,3 +48,5 @@ Out of scope: [what NOT to touch]
 ## Output
 
 Restructured plan as ordered slices. Lead with one paragraph: why this order, what risk each slice retires, where first user-visible value lands. Each slice fills the template — agent executes slice N without re-reading the conversation.
+
+**Always write output to `PLAN.md`** in the project root. Overwrite if exists.
