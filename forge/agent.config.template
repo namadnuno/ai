@@ -1,0 +1,47 @@
+# ─────────────────────────────────────────────────────────────────
+#  Per-project agent pipeline configuration (optional)
+#
+#  Drop this at your repo root as `.agent.config` to override defaults.
+#  Sourced as bash before the pipeline runs.
+# ─────────────────────────────────────────────────────────────────
+
+# ─── Branching ───────────────────────────────────────────────────
+# Target branch for the merge request
+# TARGET_BRANCH="main"
+
+# ─── Models per agent ────────────────────────────────────────────
+# Accepts Claude Code aliases: "sonnet" | "opus" | "haiku"
+# or a full model id like "claude-opus-4-7".
+#
+# Defaults are tuned for cost: cheap-but-capable Sonnet implements,
+# stronger Opus reviews. Reviews benefit more from peak intelligence.
+#
+# PROGRAMMER_MODEL="sonnet"
+# REVIEWER_MODEL="opus"
+
+# Cheap mode (everything on Haiku — fast & low cost, lower quality):
+#   PROGRAMMER_MODEL="haiku"
+#   REVIEWER_MODEL="haiku"
+#
+# Premium mode (max quality, max cost):
+#   PROGRAMMER_MODEL="opus"
+#   REVIEWER_MODEL="opus"
+
+# ─── Iteration limits (rough cost cap) ───────────────────────────
+# Each turn ≈ one Claude response; lower = cheaper but may not finish.
+# PROGRAMMER_MAX_TURNS=15
+# REVIEWER_MAX_TURNS=10
+
+# ─── Token budgets (hard caps) ───────────────────────────────────
+# input + output tokens per agent. Pipeline aborts before next
+# agent if cumulative usage exceeds the total cap.
+# Set to 0 to disable a specific cap.
+#
+# MAX_TOKENS_PROGRAMMER=500000
+# MAX_TOKENS_REVIEWER=300000
+# MAX_TOKENS_TOTAL=1000000     # hard stop for the whole run
+
+# ─── Reviewer behaviour ──────────────────────────────────────────
+# false = reviewer only flags issues, never edits code itself
+# true  = reviewer fixes minor/critical issues directly
+# ALLOW_REVIEWER_FIXES=true
