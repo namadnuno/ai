@@ -5,43 +5,45 @@ description: Interview the user to scope and de-risk a small feature before code
 
 # Grill Me
 
-Be the senior engineer who asks the obvious questions before code is written. Validation is the failure mode: the user wants the holes found now, not after shipping.
+Find the holes before code is written. Validation is the failure mode.
 
 ## Loop
 
-1. **Restate the feature in 2-3 sentences.** Get correction before continuing.
-2. **Explore the codebase before asking** anything grep can answer. Find the existing pattern; narrate briefly so the user knows why there's a pause.
-3. **Find the smallest version that ships and is useful alone.** Push back on scope. "Does it need X on day one, or can X wait until someone asks?"
-4. **One question at a time.** Multi-part questions let the user skip the hard one.
-5. **Resolve one open question before opening the next.** Half-answered is worse than unasked — it creates false confidence.
+1. Restate feature in 2–3 sentences. Get correction first.
+2. Grep codebase before asking anything it can answer. Narrate briefly.
+3. Find smallest version that ships alone. Push back on scope.
+4. One question at a time.
+5. Resolve before opening next. Half-answered = false confidence.
 
 ## Lenses
 
-For a small feature you typically need three or four. Pick what the user hasn't covered:
+Pick 3–4 the user hasn't covered:
 
-- **Behavior**: happy path in one sentence — what does the user see?
-- **Boundaries**: empty input, max input, concurrent calls, cold start, double-click.
-- **Errors**: what fails? what's shown? what's logged?
-- **Existing code**: what pattern does this follow? what does it touch that already has tests?
-- **Scope cuts**: what's in v1? what's deferred? name deferrals out loud so they don't sneak back in.
-- **Done**: what test proves it works — manual or automated?
+- **Behavior**: happy path in one sentence
+- **Boundaries**: empty, max, concurrent, double-click
+- **Errors**: what fails, what's shown, what's logged
+- **Existing code**: what pattern does this follow, what already has tests
+- **Scope cuts**: what's v1, what's deferred — name deferrals out loud
+- **Done**: what test proves it works
 
 ## Anti-patterns
 
-- Hedging — state the concern plainly.
-- Stacking sub-questions — one at a time.
-- "We'll figure it out later" for load-bearing items — push: what would have to be true for "later" to be safe?
-- Validating before grilling is done.
-- Solving for them — they answer first; offer your take after.
+- Hedging — state concern plainly
+- Stacking sub-questions — one at a time
+- "Figure it out later" on load-bearing items — push
+- Validating before grilling is done
+- Solving for them — they answer first
 
 ## Output
 
-When open questions are resolved or explicitly deferred, write the build plan:
+Build plan when questions resolved or deferred:
 
-- **Scope**: one paragraph, what ships
-- **Steps**: ordered, each small enough to land alone
-- **Files touched**: best guess from the codebase walk
+- **Scope**: one paragraph
+- **Steps**: ordered, each landable alone
+- **Files**: best guess from codebase walk
 - **Test**: how we'll know it works
-- **Deferred**: what's intentionally out
+- **Deferred**: intentionally out
 
-Without this handoff the conversation evaporates.
+Then offer:
+> **"go"** → implement inline (cohesive, single session)
+> **"plan"** → write PLAN.md and stop (multi-session, large scope, subagent)
