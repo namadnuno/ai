@@ -5,10 +5,6 @@
 #  Sourced as bash before the pipeline runs.
 # ─────────────────────────────────────────────────────────────────
 
-# ─── Branching ───────────────────────────────────────────────────
-# Target branch for the merge request
-# TARGET_BRANCH="main"
-
 # ─── Models per agent ────────────────────────────────────────────
 # Accepts Claude Code aliases: "sonnet" | "opus" | "haiku"
 # or a full model id like "claude-opus-4-7".

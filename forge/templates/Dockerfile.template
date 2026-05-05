@@ -45,10 +45,8 @@ RUN apt-get update && apt-get install -y \
 # (If your base image is NOT Node-based, install Node first, then this.)
 RUN npm install -g @anthropic-ai/claude-code
 
-# ─── Required: non-root user ─────────────────────────────────────
-RUN useradd -m -s /bin/bash agent \
-  && mkdir -p /home/agent/.claude /workspace /agent \
-  && chown -R agent:agent /home/agent /workspace /agent
+# ─── Required: workspace dirs ────────────────────────────────────
+# Dirs must exist and be world-writable — container runs as host UID (unknown at build time)
+RUN mkdir -p /workspace /agent && chmod 777 /workspace /agent
 
-USER agent
 WORKDIR /workspace

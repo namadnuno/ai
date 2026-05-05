@@ -17,7 +17,6 @@ REPO_NAME="$(basename "$REPO_ROOT")"
 IMAGE_NAME="agent-pipeline-$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]'):latest"
 
 # ─── Defaults (overridable via .agent.config) ────────────────────
-TARGET_BRANCH="main"
 PROGRAMMER_MODEL="sonnet"
 REVIEWER_MODEL="opus"
 PROGRAMMER_MAX_TURNS=15
@@ -42,7 +41,6 @@ get_field() {
 
 spec_id()      { get_field "$1" "id"; }
 spec_title()   { get_field "$1" "title"; }
-spec_branch()  { get_field "$1" "branch"; }
 spec_deps()    { get_field "$1" "depends_on"; }
 
 # ─── Dependency check ────────────────────────────────────────────
@@ -61,7 +59,6 @@ deps_resolved() {
 # ─── Run single agent pipeline (non-interactive) ─────────────────
 launch_agent() {
   local id="$1" spec_file="$2"
-  local branch; branch="$(spec_branch "$spec_file")"
   local title; title="$(spec_title "$spec_file")"
   local run_id; run_id="$(date +%Y%m%d-%H%M%S)-${id}"
   local log_file="$LOGS_DIR/${run_id}.log"
@@ -69,33 +66,37 @@ launch_agent() {
   mkdir -p "$LOGS_DIR"
 
   echo -e "\n${MAGENTA}  🚀 Launching ${BOLD}${id}${RESET}${MAGENTA}: ${title}${RESET}"
-  echo -e "  ${DIM}branch: $branch  |  log: $log_file${RESET}"
+  echo -e "  ${DIM}log: $log_file${RESET}"
 
   local bp_tmp; bp_tmp="$(mktemp /tmp/agent-bp-XXXXXX.md)"
   [ -f "$PROJECT_BEST_PRACTICES" ] && cp "$PROJECT_BEST_PRACTICES" "$bp_tmp" \
                                    || echo "# (no conventions)" > "$bp_tmp"
 
-  local claude_tmp; claude_tmp="$(mktemp -d /tmp/claude-cfg-XXXXXX)"
+  local agent_home; agent_home="$(mktemp -d /tmp/agent-home-XXXXXX)"
+  mkdir -p "$agent_home/.claude"
   if [ -d "$HOME/.claude" ]; then
-    tar -C "$HOME/.claude" -cf - . 2>/dev/null | tar -C "$claude_tmp" -xf - 2>/dev/null || \
-      cp -r "$HOME/.claude/." "$claude_tmp/" 2>/dev/null
+    tar -C "$HOME/.claude" -cf - . 2>/dev/null | tar -C "$agent_home/.claude" -xf - 2>/dev/null || \
+      cp -r "$HOME/.claude/." "$agent_home/.claude/" 2>/dev/null
   fi
+  [ -f "$HOME/.claude.json" ] && cp "$HOME/.claude.json" "$agent_home/.claude.json" 2>/dev/null || true
 
-  local ssh_mount=""; [ -d "$HOME/.ssh" ] && ssh_mount="-v $HOME/.ssh:/home/agent/.ssh:ro"
-  local git_mount=""; [ -f "$HOME/.gitconfig" ] && git_mount="-v $HOME/.gitconfig:/home/agent/.gitconfig:ro"
-  local claudejson_mount=""; [ -f "$HOME/.claude.json" ] && claudejson_mount="-v $HOME/.claude.json:/home/agent/.claude.json:ro"
+  local ssh_mount=""; [ -d "$HOME/.ssh" ] && ssh_mount="-v $HOME/.ssh:/home/runuser/.ssh:ro,z"
+  local git_mount=""; [ -f "$HOME/.gitconfig" ] && git_mount="-v $HOME/.gitconfig:/home/runuser/.gitconfig:ro,z"
 
   local exit_code=0
   docker run --rm \
-    -v "$REPO_ROOT:/workspace" \
-    -v "$AGENT_DIR/prompts:/agent/prompts:ro" \
-    -v "$AGENT_DIR/orchestrate.sh:/agent/orchestrate.sh:ro" \
-    -v "$spec_file:/agent/specs.md:ro" \
-    -v "$bp_tmp:/agent/best-practices.md:ro" \
-    -v "$claude_tmp:/home/agent/.claude" \
-    $ssh_mount $git_mount $claudejson_mount \
-    -e BRANCH="$branch" \
-    -e TARGET_BRANCH="$TARGET_BRANCH" \
+    --user "$(id -u):$(id -g)" \
+    -e HOME=/home/runuser \
+    -v "$agent_home:/home/runuser:z" \
+    -v "$REPO_ROOT:/workspace:z" \
+    -v "$AGENT_DIR/prompts:/agent/prompts:ro,z" \
+    -v "$AGENT_DIR/orchestrate.sh:/agent/orchestrate.sh:ro,z" \
+    -v "$spec_file:/agent/specs.md:ro,z" \
+    -v "$bp_tmp:/agent/best-practices.md:ro,z" \
+    $ssh_mount $git_mount \
+    -e GIT_CONFIG_COUNT=1 \
+    -e GIT_CONFIG_KEY_0=safe.directory \
+    -e GIT_CONFIG_VALUE_0='*' \
     -e IMAGE_NAMES="" \
     -e PROGRAMMER_MODEL="$PROGRAMMER_MODEL" \
     -e REVIEWER_MODEL="$REVIEWER_MODEL" \
@@ -110,11 +111,11 @@ launch_agent() {
     bash /agent/orchestrate.sh > "$log_file" 2>&1 || exit_code=$?
 
   rm -f "$bp_tmp"
-  rm -rf "$claude_tmp"
+  rm -rf "$agent_home"
 
   if [ $exit_code -eq 0 ]; then
     mv "$QUEUE_DIR/running/${id}.md" "$QUEUE_DIR/done/${id}.md"
-    print_ok "Done: ${id} → ${branch}"
+    print_ok "Done: ${id}"
   else
     mv "$QUEUE_DIR/running/${id}.md" "$QUEUE_DIR/failed/${id}.md"
     print_err "Failed: ${id} (exit $exit_code) — see $log_file"

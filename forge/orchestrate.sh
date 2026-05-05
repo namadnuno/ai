@@ -6,8 +6,6 @@ RESET='\033[0m'; BOLD='\033[1m'; DIM='\033[2m'
 CYAN='\033[36m'; GREEN='\033[32m'; YELLOW='\033[33m'
 RED='\033[31m';  MAGENTA='\033[35m'
 
-BRANCH="${BRANCH:-feature/agent-run}"
-TARGET_BRANCH="${TARGET_BRANCH:-main}"
 IMAGE_NAMES="${IMAGE_NAMES:-}"
 
 PROGRAMMER_MODEL="${PROGRAMMER_MODEL:-sonnet}"
@@ -27,7 +25,7 @@ IMAGES_DIR="${IMAGES_DIR:-/agent/images}"
 PROMPTS_DIR="${PROMPTS_DIR:-/agent/prompts}"
 WORKSPACE="${WORKSPACE:-/workspace}"
 LOGS_DIR="${LOGS_DIR:-$WORKSPACE/.agent.logs}"
-RUN_ID="$(date +%Y%m%d-%H%M%S)"
+RUN_ID="$(date +%Y%m%d-%H%M%S)-$$"
 
 mkdir -p "$LOGS_DIR"
 
@@ -104,8 +102,7 @@ run_agent() {
   # Build full prompt
   local full_prompt
   full_prompt="$(sed \
-    -e "s|{{BRANCH}}|$BRANCH|g" \
-    -e "s|{{TARGET_BRANCH}}|$TARGET_BRANCH|g" \
+    -e "s|{{BASELINE_SHA}}|$BASELINE_SHA|g" \
     -e "s|{{RUN_ID}}|$RUN_ID|g" \
     -e "s|{{ALLOW_FIXES}}|$ALLOW_REVIEWER_FIXES|g" \
     "$prompt_file")"
@@ -140,6 +137,7 @@ $(echo -e "$list")"
   set +e
   # shellcheck disable=SC2086
   claude --print \
+         --dangerously-skip-permissions \
          --model "$model" \
          --max-turns "$max_turns" \
          --output-format stream-json \
@@ -239,7 +237,7 @@ save_summary() {
   cat > "$summary" <<EOF
 # Run summary — $RUN_ID
 
-- Branch: \`$BRANCH\` → \`$TARGET_BRANCH\`
+- Baseline: \`$BASELINE_SHA\`
 - Programmer model: \`$PROGRAMMER_MODEL\`
 - Reviewer model: \`$REVIEWER_MODEL\`
 
@@ -261,50 +259,21 @@ EOF
 setup_git() {
   print_agent "Git Setup"
   cd "$WORKSPACE"
-  git config user.email 2>/dev/null || git config user.email "agent@pipeline.local"
-  git config user.name  2>/dev/null || git config user.name  "Agent Pipeline"
-
-  local base; base="$(git rev-parse --abbrev-ref HEAD)"
-  if git rev-parse --verify "$BRANCH" &>/dev/null; then
-    print_warn "Branch exists — resetting"
-    git checkout "$BRANCH"; git reset --hard HEAD
-  else
-    git checkout -b "$BRANCH"
-    print_ok "Created $BRANCH (from $base)"
-  fi
-}
-
-# ─────────────────────────────────────────────
-push_and_get_mr_url() {
-  print_agent "Push → GitLab MR"
-  cd "$WORKSPACE"
-  git push origin "$BRANCH" --force-with-lease 2>&1 \
-    || { print_err "Push failed."; exit 1; }
-  print_ok "Pushed $BRANCH"
-
-  local remote_url; remote_url="$(git remote get-url origin)"
-  local web_url
-  if [[ "$remote_url" =~ ^git@ ]]; then
-    web_url="${remote_url#git@}"; web_url="${web_url/://}"
-    web_url="https://${web_url%.git}"
-  else
-    web_url="${remote_url%.git}"
-  fi
-  local mr_url="${web_url}/-/merge_requests/new?merge_request[source_branch]=${BRANCH}&merge_request[target_branch]=${TARGET_BRANCH}"
-  echo "$mr_url" > "$LOGS_DIR/.mr-url"
-  print_ok "MR URL ready"
+  git config user.email "agent@pipeline.local"
+  git config user.name  "Agent Pipeline"
+  BASELINE_SHA="$(git rev-parse HEAD)"
+  print_ok "Baseline: $BASELINE_SHA ($(git rev-parse --abbrev-ref HEAD))"
 }
 
 # ─────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}${MAGENTA}  🚀 Pipeline  —  $RUN_ID${RESET}"
-echo -e "${DIM}  Branch: $BRANCH → $TARGET_BRANCH${RESET}"
 echo -e "${DIM}  Models: programmer=$PROGRAMMER_MODEL  reviewer=$REVIEWER_MODEL${RESET}"
 
+BASELINE_SHA=""
 setup_git
 run_agent "Programmer" "$PROMPTS_DIR/programmer.md" "$PROGRAMMER_MODEL" "$PROGRAMMER_MAX_TURNS" "$MAX_TOKENS_PROGRAMMER"
 run_agent "Reviewer"   "$PROMPTS_DIR/reviewer.md"   "$REVIEWER_MODEL"   "$REVIEWER_MAX_TURNS"   "$MAX_TOKENS_REVIEWER"
-push_and_get_mr_url
 save_summary
 
 echo ""

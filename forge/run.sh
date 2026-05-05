@@ -20,13 +20,11 @@ IMAGE_NAME="agent-pipeline-$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]'):lat
 
 SPECS_CONTENT=""
 SPECS_SOURCE=""
-BRANCH=""
 CLAUDE_TMP=""
 IMAGE_FILES=()
 CLIP_TMP_DIR=""
 
 # ─── Defaults (overridable in .agent.config) ───
-TARGET_BRANCH="main"
 PROGRAMMER_MAX_TURNS=15
 REVIEWER_MAX_TURNS=10
 ALLOW_REVIEWER_FIXES=true
@@ -230,10 +228,12 @@ check_claude_auth() {
     print_warn "Run 'claude' once to log in, then re-run."
     exit 1
   fi
-  CLAUDE_TMP="$(mktemp -d /tmp/claude-cfg-XXXXXX)"
-  # tar handles broken symlinks (e.g. debug/latest) that cp -r chokes on
-  tar -C "$HOME/.claude" -cf - . 2>/dev/null | tar -C "$CLAUDE_TMP" -xf - 2>/dev/null || \
-    cp -r "$HOME/.claude/." "$CLAUDE_TMP/" 2>/dev/null
+  # Build a writable temp home: claude config + optional .claude.json inside
+  CLAUDE_TMP="$(mktemp -d /tmp/agent-home-XXXXXX)"
+  mkdir -p "$CLAUDE_TMP/.claude"
+  tar -C "$HOME/.claude" -cf - . 2>/dev/null | tar -C "$CLAUDE_TMP/.claude" -xf - 2>/dev/null || \
+    cp -r "$HOME/.claude/." "$CLAUDE_TMP/.claude/" 2>/dev/null
+  [ -f "$HOME/.claude.json" ] && cp "$HOME/.claude.json" "$CLAUDE_TMP/.claude.json" 2>/dev/null || true
   print_ok "Credentials ready"
 }
 
@@ -336,14 +336,6 @@ get_images() {
                                || echo -e "  ${DIM}None.${RESET}"
 }
 
-get_branch() {
-  print_step "Branch"
-  local d="feature/agent-$(date +%Y%m%d-%H%M)"
-  read -rp "$(echo -e "  ${CYAN}Branch ${DIM}[$d]:${RESET} ")" b
-  BRANCH="${b:-$d}"; BRANCH="${BRANCH// /-}"; BRANCH="$(echo "$BRANCH" | tr '[:upper:]' '[:lower:]')"
-  print_ok "Branch: $BRANCH"
-}
-
 # ─────────────────────────────────────────────
 #  Confirmation summary including budgets
 # ─────────────────────────────────────────────
@@ -352,7 +344,7 @@ confirm() {
   echo -e "  ${BOLD}Summary${RESET}"
   print_divider
   echo -e "  ${DIM}Repo:${RESET}      $REPO_ROOT"
-  echo -e "  ${DIM}Branch:${RESET}    ${BOLD}$BRANCH${RESET} → ${TARGET_BRANCH}"
+  echo -e "  ${DIM}Branch:${RESET}    $(git -C "$REPO_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '(unknown)')"
   echo -e "  ${DIM}Specs:${RESET}     $SPECS_SOURCE"
   echo -e "  ${DIM}Images:${RESET}    ${#IMAGE_FILES[@]}"
   print_divider
@@ -399,8 +391,6 @@ run_pipeline() {
 
   local logs_dir="$REPO_ROOT/.agent.logs"
   mkdir -p "$logs_dir"
-  rm -f "$logs_dir/.mr-url"
-
   local images_stage="" images_mount="" image_names_env=""
   if [ ${#IMAGE_FILES[@]} -gt 0 ]; then
     images_stage="$(mktemp -d /tmp/agent-stage-XXXXXX)"
@@ -408,27 +398,29 @@ run_pipeline() {
     for f in "${IMAGE_FILES[@]}"; do
       local b="$(basename "$f")"; cp "$f" "$images_stage/$b"; names+=("$b")
     done
-    images_mount="-v $images_stage:/agent/images:ro"
+    images_mount="-v $images_stage:/agent/images:ro,z"
     image_names_env="$(IFS=:; echo "${names[*]}")"
   fi
 
   echo ""
   echo -e "${BOLD}${MAGENTA}  🚀 Starting...${RESET}\n"
 
-  local ssh_mount=""; [ -d "$HOME/.ssh" ] && ssh_mount="-v $HOME/.ssh:/home/agent/.ssh:ro"
-  local gitconfig_mount=""; [ -f "$HOME/.gitconfig" ] && gitconfig_mount="-v $HOME/.gitconfig:/home/agent/.gitconfig:ro"
-  local claudejson_mount=""; [ -f "$HOME/.claude.json" ] && claudejson_mount="-v $HOME/.claude.json:/home/agent/.claude.json:ro"
+  local ssh_mount=""; [ -d "$HOME/.ssh" ] && ssh_mount="-v $HOME/.ssh:/home/runuser/.ssh:ro,z"
+  local gitconfig_mount=""; [ -f "$HOME/.gitconfig" ] && gitconfig_mount="-v $HOME/.gitconfig:/home/runuser/.gitconfig:ro,z"
 
   docker run --rm -it \
-    -v "$REPO_ROOT:/workspace" \
-    -v "$AGENT_DIR/prompts:/agent/prompts:ro" \
-    -v "$AGENT_DIR/orchestrate.sh:/agent/orchestrate.sh:ro" \
-    -v "$specs_tmp:/agent/specs.md:ro" \
-    -v "$bp_tmp:/agent/best-practices.md:ro" \
-    -v "$CLAUDE_TMP:/home/agent/.claude" \
-    $images_mount $ssh_mount $gitconfig_mount $claudejson_mount \
-    -e BRANCH="$BRANCH" \
-    -e TARGET_BRANCH="$TARGET_BRANCH" \
+    --user "$(id -u):$(id -g)" \
+    -e HOME=/home/runuser \
+    -v "$CLAUDE_TMP:/home/runuser:z" \
+    -v "$REPO_ROOT:/workspace:z" \
+    -v "$AGENT_DIR/prompts:/agent/prompts:ro,z" \
+    -v "$AGENT_DIR/orchestrate.sh:/agent/orchestrate.sh:ro,z" \
+    -v "$specs_tmp:/agent/specs.md:ro,z" \
+    -v "$bp_tmp:/agent/best-practices.md:ro,z" \
+    $images_mount $ssh_mount $gitconfig_mount \
+    -e GIT_CONFIG_COUNT=1 \
+    -e GIT_CONFIG_KEY_0=safe.directory \
+    -e GIT_CONFIG_VALUE_0='*' \
     -e IMAGE_NAMES="${image_names_env:-}" \
     -e PROGRAMMER_MODEL="$PROGRAMMER_MODEL" \
     -e REVIEWER_MODEL="$REVIEWER_MODEL" \
@@ -444,16 +436,6 @@ run_pipeline() {
 
   rm -f "$specs_tmp" "$bp_tmp"
   [ -n "$images_stage" ] && rm -rf "$images_stage"
-
-  if [ -f "$logs_dir/.mr-url" ]; then
-    local url; url="$(cat "$logs_dir/.mr-url")"
-    echo ""
-    echo -e "${BOLD}${GREEN}  ✓ Branch pushed!${RESET}"
-    echo -e "  ${CYAN}${BOLD}${url}${RESET}\n"
-    if   command -v xdg-open &>/dev/null; then xdg-open "$url"
-    elif command -v open     &>/dev/null; then open     "$url"
-    fi
-  fi
 }
 
 # ─────────────────────────────────────────────
@@ -465,6 +447,5 @@ check_claude_auth
 ensure_image
 get_specs
 get_images
-get_branch
 confirm
 run_pipeline

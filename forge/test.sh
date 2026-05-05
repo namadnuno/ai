@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# forge/test.sh — dry-run orchestrate.sh without Docker or real Claude
+# forge/test.sh — integration test: real Claude, real Docker, runs start.sh with 3 tiny specs
 # Usage: bash forge/test.sh
 set -euo pipefail
 
@@ -7,137 +7,159 @@ RESET='\033[0m'; BOLD='\033[1m'; GREEN='\033[32m'; RED='\033[31m'
 CYAN='\033[36m'; YELLOW='\033[33m'; DIM='\033[2m'
 
 FORGE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(git -C "$FORGE_DIR" rev-parse --show-toplevel)"
+RUNS_DIR="$REPO_ROOT/forge-test-runs"
+FAILURES=0
 
 pass() { echo -e "${GREEN}  ✓ $1${RESET}"; }
 fail() { echo -e "${RED}  ✗ $1${RESET}"; FAILURES=$((FAILURES + 1)); }
 step() { echo -e "\n${BOLD}${CYAN}▶ $1${RESET}"; }
 
-FAILURES=0
-WORK_DIR="$(mktemp -d /tmp/forge-test-XXXXXX)"
-trap 'rm -rf "$WORK_DIR"' EXIT
+# ─── Persistent test project dir (gitignored, watchable) ─────────
+mkdir -p "$RUNS_DIR"
+PROJECT="$RUNS_DIR/run-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$PROJECT"
 
-# ─── Fake binaries ───────────────────────────────────────────────
-FAKE_BIN="$WORK_DIR/bin"
-mkdir -p "$FAKE_BIN"
+step "Setting up test project at $PROJECT"
 
-# git wrapper: intercept push (no remote), pass everything else through
-cat > "$FAKE_BIN/git" <<EOF
-#!/usr/bin/env bash
-if [ "\$1" = "push" ]; then
-  echo "  [test] git push skipped"
-  exit 0
-fi
-exec "$(which git)" "\$@"
+# Minimal git repo
+git init -q "$PROJECT"
+git -C "$PROJECT" config user.email "test@forge.local"
+git -C "$PROJECT" config user.name "Forge Test"
+
+# Source file the agents will modify
+cat > "$PROJECT/index.js" <<'EOF'
+function greet(name) {
+  return `Hello, ${name}!`;
+}
+
+module.exports = { greet };
 EOF
-chmod +x "$FAKE_BIN/git"
+git -C "$PROJECT" add index.js
+git -C "$PROJECT" commit -q -m "chore: init"
 
-cat > "$FAKE_BIN/claude" <<'EOF'
-#!/usr/bin/env bash
-# Emits minimal valid stream-json, then writes a sentinel commit so orchestrate
-# can verify the programmer actually "ran" (reviewer checks the diff).
-cd /workspace 2>/dev/null || true
-echo '{"type":"assistant","message":{"content":[{"type":"text","text":"[mock] running"}]}}'
+# ─── Install forge as .agent/ ────────────────────────────────────
+cp -r "$FORGE_DIR" "$PROJECT/.agent"
+chmod +x "$PROJECT/.agent/run.sh" "$PROJECT/.agent/start.sh" \
+         "$PROJECT/.agent/review.sh" "$PROJECT/.agent/orchestrate.sh"
+echo -e "  ${DIM}forge installed → $PROJECT/.agent/${RESET}"
 
-# Let programmer write a file so reviewer has a diff to check
-if echo "$*" | grep -q "programmer\|programmer"; then
-  echo "mock" >> mock-output.txt
-  git add mock-output.txt 2>/dev/null || true
-  git commit -m "feat: mock programmer output" 2>/dev/null || true
-fi
-
-echo '{"type":"result","subtype":"success","is_error":false,"usage":{"input_tokens":42,"output_tokens":17,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}'
-EOF
-chmod +x "$FAKE_BIN/claude"
-
-# ─── Fake git repo ────────────────────────────────────────────────
-REPO="$WORK_DIR/repo"
-git init -q "$REPO"
-git -C "$REPO" config user.email "test@test.local"
-git -C "$REPO" config user.name "Test"
-# need at least one commit on main so branches have a base
-echo "init" > "$REPO/README.md"
-git -C "$REPO" add README.md
-git -C "$REPO" commit -q -m "chore: init"
-git -C "$REPO" remote add origin "git@example.com:test/repo.git" 2>/dev/null || true
-
-# ─── Stub agent/ inputs ───────────────────────────────────────────
-    mkdir -p "$WORK_DIR/agent/prompts" "$WORK_DIR/agent/images"
-cp "$FORGE_DIR/prompts/programmer.md" "$WORK_DIR/agent/prompts/programmer.md"
-cp "$FORGE_DIR/prompts/reviewer.md"   "$WORK_DIR/agent/prompts/reviewer.md"
-
-cat > "$WORK_DIR/agent/specs.md" <<'EOF'
----
-title: "Test spec"
----
-Write a file called mock-output.txt with the text "mock".
+# ─── .agent.Dockerfile ───────────────────────────────────────────
+cat > "$PROJECT/.agent.Dockerfile" <<'EOF'
+FROM node:22-slim
+RUN apt-get update && apt-get install -y \
+    git curl jq bash ca-certificates \
+    --no-install-recommends \
+  && rm -rf /var/lib/apt/lists/*
+RUN npm install -g @anthropic-ai/claude-code
+RUN mkdir -p /workspace /agent && chmod 777 /workspace /agent
+WORKDIR /workspace
 EOF
 
-cat > "$WORK_DIR/agent/best-practices.md" <<'EOF'
+# ─── .agent.md ───────────────────────────────────────────────────
+cat > "$PROJECT/.agent.md" <<'EOF'
 # Conventions
-- Keep it simple
+- Plain Node.js, no framework
+- index.js is the main file
+- Commit with conventional commits (feat:, fix:, chore:)
+- No tests required for this task
 EOF
 
-ORCH_COPY="$FORGE_DIR/orchestrate.sh"
+# ─── .agent.config ───────────────────────────────────────────────
+cat > "$PROJECT/.agent.config" <<'EOF'
+PROGRAMMER_MODEL="sonnet"
+REVIEWER_MODEL="sonnet"
+PROGRAMMER_MAX_TURNS=8
+REVIEWER_MAX_TURNS=8
+MAX_TOKENS_PROGRAMMER=100000
+MAX_TOKENS_REVIEWER=50000
+MAX_TOKENS_TOTAL=600000
+EOF
 
-# ─── Run ──────────────────────────────────────────────────────────
-step "Running orchestrate.sh with mock claude"
-echo -e "  ${DIM}repo:    $REPO${RESET}"
-echo -e "  ${DIM}workdir: $WORK_DIR${RESET}\n"
+# ─── Specs ───────────────────────────────────────────────────────
+mkdir -p "$PROJECT/.agent.queue/pending"
 
-export PATH="$FAKE_BIN:$PATH"
+cat > "$PROJECT/.agent.queue/pending/spec-001.md" <<'EOF'
+---
+id: spec-001
+title: Add startup log
+depends_on:
+---
 
-set +e
-WORKSPACE="$REPO" \
-SPECS_FILE="$WORK_DIR/agent/specs.md" \
-BEST_PRACTICES_FILE="$WORK_DIR/agent/best-practices.md" \
-IMAGES_DIR="$WORK_DIR/agent/images" \
-PROMPTS_DIR="$WORK_DIR/agent/prompts" \
-LOGS_DIR="$REPO/.agent.logs" \
-BRANCH="feature/test-run" \
-TARGET_BRANCH="main" \
-PROGRAMMER_MODEL="sonnet" \
-REVIEWER_MODEL="sonnet" \
-PROGRAMMER_MAX_TURNS=3 \
-REVIEWER_MAX_TURNS=3 \
-MAX_TOKENS_PROGRAMMER=0 \
-MAX_TOKENS_REVIEWER=0 \
-MAX_TOKENS_TOTAL=0 \
-ALLOW_REVIEWER_FIXES=true \
-  bash "$ORCH_COPY" 2>&1
-EXIT_CODE=$?
-set -e
+# Task
 
-# ─── Assertions ───────────────────────────────────────────────────
+In `index.js`, add `console.log("app started")` as the very first line of the file.
+
+## Acceptance criteria
+
+- [ ] First line of index.js is exactly: `console.log("app started")`
+EOF
+
+cat > "$PROJECT/.agent.queue/pending/spec-002.md" <<'EOF'
+---
+id: spec-002
+title: Add greet log
+depends_on: spec-001
+---
+
+# Task
+
+In `index.js`, inside the `greet` function body, add `console.log("greet called")` as the first statement.
+
+## Acceptance criteria
+
+- [ ] greet() logs "greet called" before returning
+EOF
+
+cat > "$PROJECT/.agent.queue/pending/spec-003.md" <<'EOF'
+---
+id: spec-003
+title: Add version constant
+depends_on: spec-002
+---
+
+# Task
+
+In `index.js`, add a `const VERSION = "1.0.0"` constant after the existing requires/imports (or at the top if there are none), then export it: add `VERSION` to the `module.exports` object.
+
+## Acceptance criteria
+
+- [ ] VERSION constant defined as "1.0.0"
+- [ ] VERSION exported from module.exports
+EOF
+
+echo -e "  ${DIM}3 specs written to .agent.queue/pending/${RESET}"
+
+# ─── Run start.sh ────────────────────────────────────────────────
+step "Running start.sh (real Claude, real Docker)"
+echo -e "  ${YELLOW}Building Docker image and running 3 agent pipelines.${RESET}"
+echo -e "  ${DIM}Watch queue:  watch -n1 'find $PROJECT/.agent.queue -name \"*.md\" | sort'${RESET}"
+echo -e "  ${DIM}Watch logs:   tail -f $PROJECT/.agent.logs/*.log${RESET}\n"
+
+cd "$PROJECT"
+bash "$PROJECT/.agent/start.sh"
+
+# ─── Assertions ──────────────────────────────────────────────────
 step "Assertions"
 
-if [ $EXIT_CODE -eq 0 ]; then
-  pass "orchestrate.sh exited 0"
-else
-  fail "orchestrate.sh exited $EXIT_CODE"
-fi
+for id in spec-001 spec-002 spec-003; do
+  if [ -f "$PROJECT/.agent.queue/done/${id}.md" ]; then
+    pass "$id → done"
+  elif [ -f "$PROJECT/.agent.queue/failed/${id}.md" ]; then
+    fail "$id → failed (check .agent.logs/)"
+  else
+    fail "$id → not processed"
+  fi
+done
 
-if git -C "$REPO" rev-parse --verify "feature/test-run" &>/dev/null; then
-  pass "branch feature/test-run created"
-else
-  fail "branch feature/test-run not found"
-fi
+FAIL_COUNT=$(find "$PROJECT/.agent.queue/failed" -name "*.md" 2>/dev/null | wc -l)
+[ "$FAIL_COUNT" -eq 0 ] && pass "no failed specs" || fail "$FAIL_COUNT spec(s) failed"
 
-LOG_COUNT=$(ls "$REPO/.agent.logs/"*.jsonl 2>/dev/null | wc -l || echo 0)
-if [ "$LOG_COUNT" -ge 2 ]; then
-  pass "stream log files written ($LOG_COUNT)"
-else
-  fail "expected ≥2 stream logs, got $LOG_COUNT"
-fi
-
-SUMMARY=$(ls "$REPO/.agent.logs/"*-summary.md 2>/dev/null | head -1 || echo "")
-if [ -f "$SUMMARY" ]; then
-  pass "summary.md written"
-else
-  fail "summary.md not found"
-fi
-
-# ─── Result ───────────────────────────────────────────────────────
+# ─── Result ──────────────────────────────────────────────────────
 echo ""
+echo -e "  ${DIM}Run dir:  $PROJECT${RESET}"
+echo -e "  ${DIM}Logs:     $PROJECT/.agent.logs/${RESET}"
+echo -e "  ${DIM}Queue:    $PROJECT/.agent.queue/${RESET}"
 if [ "$FAILURES" -eq 0 ]; then
   echo -e "${BOLD}${GREEN}  All tests passed.${RESET}"
 else
