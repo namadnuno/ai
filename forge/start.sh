@@ -14,7 +14,7 @@ PROJECT_BEST_PRACTICES="$REPO_ROOT/.agent.md"
 PROJECT_CONFIG="$REPO_ROOT/.agent.config"
 LOGS_DIR="$REPO_ROOT/.agent.logs"
 REPO_NAME="$(basename "$REPO_ROOT")"
-IMAGE_NAME="agent-pipeline-${REPO_NAME,,}:latest"
+IMAGE_NAME="agent-pipeline-$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]'):latest"
 
 # ─── Defaults (overridable via .agent.config) ────────────────────
 TARGET_BRANCH="main"
@@ -76,10 +76,14 @@ launch_agent() {
                                    || echo "# (no conventions)" > "$bp_tmp"
 
   local claude_tmp; claude_tmp="$(mktemp -d /tmp/claude-cfg-XXXXXX)"
-  [ -d "$HOME/.claude" ] && cp -r "$HOME/.claude/." "$claude_tmp/"
+  if [ -d "$HOME/.claude" ]; then
+    tar -C "$HOME/.claude" -cf - . 2>/dev/null | tar -C "$claude_tmp" -xf - 2>/dev/null || \
+      cp -r "$HOME/.claude/." "$claude_tmp/" 2>/dev/null
+  fi
 
   local ssh_mount=""; [ -d "$HOME/.ssh" ] && ssh_mount="-v $HOME/.ssh:/home/agent/.ssh:ro"
   local git_mount=""; [ -f "$HOME/.gitconfig" ] && git_mount="-v $HOME/.gitconfig:/home/agent/.gitconfig:ro"
+  local claudejson_mount=""; [ -f "$HOME/.claude.json" ] && claudejson_mount="-v $HOME/.claude.json:/home/agent/.claude.json:ro"
 
   local exit_code=0
   docker run --rm \
@@ -89,7 +93,7 @@ launch_agent() {
     -v "$spec_file:/agent/specs.md:ro" \
     -v "$bp_tmp:/agent/best-practices.md:ro" \
     -v "$claude_tmp:/home/agent/.claude" \
-    $ssh_mount $git_mount \
+    $ssh_mount $git_mount $claudejson_mount \
     -e BRANCH="$branch" \
     -e TARGET_BRANCH="$TARGET_BRANCH" \
     -e IMAGE_NAMES="" \

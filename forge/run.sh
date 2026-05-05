@@ -16,7 +16,7 @@ PROJECT_BEST_PRACTICES="$REPO_ROOT/.agent.md"
 PROJECT_CONFIG="$REPO_ROOT/.agent.config"
 
 REPO_NAME="$(basename "$REPO_ROOT")"
-IMAGE_NAME="agent-pipeline-${REPO_NAME,,}:latest"
+IMAGE_NAME="agent-pipeline-$(echo "$REPO_NAME" | tr '[:upper:]' '[:lower:]'):latest"
 
 SPECS_CONTENT=""
 SPECS_SOURCE=""
@@ -91,7 +91,7 @@ bootstrap_project() {
   local needs=false
   [ ! -f "$PROJECT_DOCKERFILE" ] && needs=true
   [ ! -f "$PROJECT_BEST_PRACTICES" ] && needs=true
-  $needs || return
+  if [[ "$needs" != true ]]; then return; fi
 
   print_step "First-time setup for this repository"
   echo ""
@@ -165,7 +165,7 @@ ask_install() {
   echo ""; echo -e "  ${YELLOW}$1 not installed.${RESET}"
   echo -e "  ${DIM}Command: ${BOLD}$2${RESET}"
   read -rp "$(echo -e "  ${CYAN}Install? [Y/n]:${RESET} ")" yn
-  [[ "${yn,,}" == "n"* ]] && return 1 || return 0
+  [[ "$yn" == [Nn]* ]] && return 1 || return 0
 }
 pkg_install() {
   case "$PKG_MANAGER" in
@@ -210,7 +210,7 @@ check_deps() {
     print_error "Docker not running."
     if ! $IS_MAC; then
       read -rp "$(echo -e "  ${CYAN}Start? [Y/n]:${RESET} ")" yn
-      [[ "${yn,,}" != "n"* ]] && sudo systemctl start docker
+      [[ "$yn" != [Nn]* ]] && sudo systemctl start docker
       docker info &>/dev/null || exit 1
     else exit 1; fi
   fi
@@ -231,7 +231,9 @@ check_claude_auth() {
     exit 1
   fi
   CLAUDE_TMP="$(mktemp -d /tmp/claude-cfg-XXXXXX)"
-  cp -r "$HOME/.claude/." "$CLAUDE_TMP/"
+  # tar handles broken symlinks (e.g. debug/latest) that cp -r chokes on
+  tar -C "$HOME/.claude" -cf - . 2>/dev/null | tar -C "$CLAUDE_TMP" -xf - 2>/dev/null || \
+    cp -r "$HOME/.claude/." "$CLAUDE_TMP/" 2>/dev/null
   print_ok "Credentials ready"
 }
 
@@ -298,7 +300,7 @@ EOF
 get_images() {
   print_step "Images  ${DIM}(optional)${RESET}\n"
   read -rp "$(echo -e "  ${CYAN}Add? [y/N]:${RESET} ")" want
-  [[ "${want,,}" != "y"* ]] && { echo -e "  ${DIM}Skipped.${RESET}"; return; }
+  [[ "$want" != [Yy]* ]] && { echo -e "  ${DIM}Skipped.${RESET}"; return; }
   CLIP_TMP_DIR="$(mktemp -d /tmp/agent-imgs-XXXXXX)"
   local idx=1
   local clip_ok=true; [ "$CLIP_TOOL" = "none" ] && clip_ok=false
@@ -307,8 +309,9 @@ get_images() {
            || echo -e "  ${BOLD}f${RESET} file  ${BOLD}done${RESET}\n"
   while true; do
     read -rp "$(echo -e "  ${CYAN}[c/f/done]:${RESET} ")" c
-    case "${c,,}" in
-      c) $clip_ok || { print_warn "Not available"; continue; }
+    local cl; cl="$(echo "$c" | tr '[:upper:]' '[:lower:]')"
+    case "$cl" in
+      [Cc]) $clip_ok || { print_warn "Not available"; continue; }
          local out="$CLIP_TMP_DIR/screenshot-${idx}.png"
          local s; s="$(clipboard_to_png "$out")"
          [ -z "$s" ] && print_warn "No image" \
@@ -320,7 +323,7 @@ get_images() {
          for f in "${exp[@]}"; do
            f="$(realpath "$f" 2>/dev/null || echo "$f")"
            [ -f "$f" ] || { print_warn "Not found: $f"; continue; }
-           local ext="${f##*.}"; ext="${ext,,}"
+           local ext="${f##*.}"; ext="$(echo "$ext" | tr '[:upper:]' '[:lower:]')"
            case "$ext" in
              png|jpg|jpeg|gif|webp) IMAGE_FILES+=("$f"); print_ok "Added: $(basename "$f")" ;;
              *) print_warn "Unsupported: .$ext" ;;
@@ -337,7 +340,7 @@ get_branch() {
   print_step "Branch"
   local d="feature/agent-$(date +%Y%m%d-%H%M)"
   read -rp "$(echo -e "  ${CYAN}Branch ${DIM}[$d]:${RESET} ")" b
-  BRANCH="${b:-$d}"; BRANCH="${BRANCH// /-}"; BRANCH="${BRANCH,,}"
+  BRANCH="${b:-$d}"; BRANCH="${BRANCH// /-}"; BRANCH="$(echo "$BRANCH" | tr '[:upper:]' '[:lower:]')"
   print_ok "Branch: $BRANCH"
 }
 
@@ -375,7 +378,7 @@ confirm() {
   fi
   print_divider; echo ""
   read -rp "$(echo -e "  ${CYAN}Run? [Y/n]:${RESET} ")" yn
-  [[ "${yn,,}" == "n"* ]] && { echo -e "${YELLOW}  Cancelled.${RESET}"; exit 0; }
+  [[ "$yn" == [Nn]* ]] && { echo -e "${YELLOW}  Cancelled.${RESET}"; exit 0; }
 }
 
 # ─────────────────────────────────────────────
@@ -414,6 +417,7 @@ run_pipeline() {
 
   local ssh_mount=""; [ -d "$HOME/.ssh" ] && ssh_mount="-v $HOME/.ssh:/home/agent/.ssh:ro"
   local gitconfig_mount=""; [ -f "$HOME/.gitconfig" ] && gitconfig_mount="-v $HOME/.gitconfig:/home/agent/.gitconfig:ro"
+  local claudejson_mount=""; [ -f "$HOME/.claude.json" ] && claudejson_mount="-v $HOME/.claude.json:/home/agent/.claude.json:ro"
 
   docker run --rm -it \
     -v "$REPO_ROOT:/workspace" \
@@ -422,7 +426,7 @@ run_pipeline() {
     -v "$specs_tmp:/agent/specs.md:ro" \
     -v "$bp_tmp:/agent/best-practices.md:ro" \
     -v "$CLAUDE_TMP:/home/agent/.claude" \
-    $images_mount $ssh_mount $gitconfig_mount \
+    $images_mount $ssh_mount $gitconfig_mount $claudejson_mount \
     -e BRANCH="$BRANCH" \
     -e TARGET_BRANCH="$TARGET_BRANCH" \
     -e IMAGE_NAMES="${image_names_env:-}" \

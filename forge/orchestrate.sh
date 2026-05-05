@@ -21,11 +21,12 @@ MAX_TOKENS_TOTAL="${MAX_TOKENS_TOTAL:-0}"
 
 ALLOW_REVIEWER_FIXES="${ALLOW_REVIEWER_FIXES:-true}"
 
-SPECS_FILE="/agent/specs.md"
-BEST_PRACTICES_FILE="/agent/best-practices.md"
-IMAGES_DIR="/agent/images"
-PROMPTS_DIR="/agent/prompts"
-LOGS_DIR="/workspace/.agent.logs"
+SPECS_FILE="${SPECS_FILE:-/agent/specs.md}"
+BEST_PRACTICES_FILE="${BEST_PRACTICES_FILE:-/agent/best-practices.md}"
+IMAGES_DIR="${IMAGES_DIR:-/agent/images}"
+PROMPTS_DIR="${PROMPTS_DIR:-/agent/prompts}"
+WORKSPACE="${WORKSPACE:-/workspace}"
+LOGS_DIR="${LOGS_DIR:-$WORKSPACE/.agent.logs}"
 RUN_ID="$(date +%Y%m%d-%H%M%S)"
 
 mkdir -p "$LOGS_DIR"
@@ -87,8 +88,9 @@ run_agent() {
   local max_turns="$4"
   local max_tokens="$5"
 
-  local log_file="$LOGS_DIR/${RUN_ID}-${name,,}.log"
-  local stream_file="$LOGS_DIR/${RUN_ID}-${name,,}.jsonl"
+  local name_lc; name_lc="$(echo "$name" | tr '[:upper:]' '[:lower:]')"
+  local log_file="$LOGS_DIR/${RUN_ID}-${name_lc}.log"
+  local stream_file="$LOGS_DIR/${RUN_ID}-${name_lc}.jsonl"
 
   print_agent "Agent: $name"
   echo -e "  ${DIM}model: $model | max-turns: $max_turns${RESET}"
@@ -258,7 +260,7 @@ EOF
 # ─────────────────────────────────────────────
 setup_git() {
   print_agent "Git Setup"
-  cd /workspace
+  cd "$WORKSPACE"
   git config user.email 2>/dev/null || git config user.email "agent@pipeline.local"
   git config user.name  2>/dev/null || git config user.name  "Agent Pipeline"
 
@@ -275,7 +277,7 @@ setup_git() {
 # ─────────────────────────────────────────────
 push_and_get_mr_url() {
   print_agent "Push → GitLab MR"
-  cd /workspace
+  cd "$WORKSPACE"
   git push origin "$BRANCH" --force-with-lease 2>&1 \
     || { print_err "Push failed."; exit 1; }
   print_ok "Pushed $BRANCH"

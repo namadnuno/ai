@@ -121,3 +121,45 @@ Default target is `main`. Override per-project in `.agent.config`:
 ```bash
 TARGET_BRANCH="develop"
 ```
+
+## Queue runner (start.sh)
+
+For running multiple specs in parallel without babysitting, use `start.sh` instead of `run.sh`.
+
+Drop spec files into `.agent.queue/pending/` (use `forge/spec.template.md` as a starting point), then:
+
+```bash
+./.agent/start.sh
+```
+
+Specs with no `depends_on` run in parallel. Specs with `depends_on: spec-001` wait until that spec moves to `done/`.
+
+```
+.agent.queue/
+├── pending/     ← drop spec files here
+├── running/     ← moved here while agent works
+├── done/        ← success
+└── failed/      ← check .agent.logs/ for why
+```
+
+Interrupted specs (in `running/` on startup) are automatically recovered back to `pending/`.
+
+## Testing forge itself
+
+`forge/test.sh` spins a real project, builds a Docker image, and runs `start.sh` end-to-end with 3 tiny specs against real Claude:
+
+```bash
+bash forge/test.sh
+```
+
+Each run lands at `forge-test-runs/run-YYYYMMDD-HHMMSS/` (gitignored, at repo root) so you can watch it while running:
+
+```bash
+# watch queue state
+watch -n1 'find forge-test-runs -name "*.md" | sort'
+
+# tail agent output live
+tail -f forge-test-runs/run-*/.agent.logs/*.log
+```
+
+Old runs persist — clean up with `rm -rf forge-test-runs/`.
