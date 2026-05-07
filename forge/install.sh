@@ -56,23 +56,31 @@ mkdir -p "$REPO_ROOT/.agent/rules"
 [ -f "$REPO_ROOT/.agent/overview.md" ] || \
   cp "$DEST/templates/overview.template.md" "$REPO_ROOT/.agent/overview.md"
 
-# .mcp.json — merge forge entry if file exists, else copy template
+# .mcp.json — absolute paths (Claude resolves args relative to shell cwd, not project root)
 MCP_JSON="$REPO_ROOT/.mcp.json"
+SERVER_ABS="$REPO_ROOT/.agent/mcp/server.js"
+FORGE_ENTRY=$(cat <<EOF_FORGE
+{"command":"node","args":["$SERVER_ABS"],"env":{"FORGE_ROOT":"$REPO_ROOT"}}
+EOF_FORGE
+)
 if [ -f "$MCP_JSON" ]; then
   if command -v jq &>/dev/null; then
-    if ! jq -e '.mcpServers.forge' "$MCP_JSON" >/dev/null 2>&1; then
-      tmp="$(mktemp)"
-      jq '.mcpServers.forge = {"command":"node","args":[".agent/mcp/server.js"]}' \
-        "$MCP_JSON" > "$tmp" && mv "$tmp" "$MCP_JSON"
-      print_ok "merged forge entry into existing .mcp.json"
-    else
-      print_ok ".mcp.json already has forge entry"
-    fi
+    tmp="$(mktemp)"
+    jq --argjson forge "$FORGE_ENTRY" '.mcpServers.forge = $forge' \
+      "$MCP_JSON" > "$tmp" && mv "$tmp" "$MCP_JSON"
+    print_ok "merged forge entry into existing .mcp.json"
   else
     print_err "jq required to merge into existing .mcp.json — install jq and re-run"
   fi
 else
-  cp "$DEST/templates/mcp.json.template" "$MCP_JSON"
+  jq -n --argjson forge "$FORGE_ENTRY" '{mcpServers:{forge:$forge}}' > "$MCP_JSON" 2>/dev/null \
+    || cat > "$MCP_JSON" <<EOF_MCP
+{
+  "mcpServers": {
+    "forge": $FORGE_ENTRY
+  }
+}
+EOF_MCP
   print_ok "wrote .mcp.json"
 fi
 

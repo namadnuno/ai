@@ -106,3 +106,15 @@ Skills `forge-init` and `grill-agents` support running Claude Code as an agent i
 - Skills for one-off tasks that don't generalize
 - Skills that are just "run this command" wrappers — use hooks or commands instead
 - Type-specific variants (e.g. `refactor-component`) before the generic version is proven
+
+<!-- forge:memory:start -->
+## Forge memory (MCP `forge`)
+
+This repo ships a memory MCP server. Use it to skip cold-start scans.
+
+- **At session start**, call `repo_overview` once to get stack, entry points, key dirs, conventions.
+- **Before editing files**, call `list_rules` (cheap — names + descriptions + globs only). If a rule's globs match the file you're about to touch, call `get_rule` to read the body.
+- **Do not** bulk-grep the codebase to derive things `repo_overview` already states.
+
+Rules live in `.agent/rules/`. Overview lives in `.agent/overview.md`. Edit directly or run `./.agent/analyze.sh` to scaffold.
+<!-- forge:memory:end -->

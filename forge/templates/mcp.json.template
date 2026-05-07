@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "forge": {
-      "command": "node",
-      "args": [".agent/mcp/server.js"]
-    }
-  }
-}
