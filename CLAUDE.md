@@ -22,11 +22,13 @@ Standalone (invoke anytime): `grooming-it`, `qa-it`, `refactor-it`
 |---|---|---|
 | `grooming-it` | Pre-dev, ticket intake | Dev plan: user stories, tasks, edge cases |
 | `grill-me` | Pre-dev, feature scoping | Build plan: scope, steps, files, test, deferred |
+| `grill-agents` | Pre-agent-run, parallelisation | Spec files in `.agent.queue/pending/` |
 | `slice-it` | Planning | Ordered vertical slices, each with a verify line |
 | `review-it` | Post-slice | Blockers / Should-fix / Nits |
 | `ship-it` | End of feature | Suite status, commit list, PR description |
 | `qa-it` | Post-ship or anytime | Grouped human QA checklist from git diff vs main |
 | `refactor-it` | Anytime | Slice-it compatible refactor plan from file analysis |
+| `forge-init` | Project setup | `.agent.Dockerfile` + `.agent.md` for agent runs |
 
 ## Skill anatomy
 
@@ -86,6 +88,16 @@ Skills are loaded into context on every invocation. Every line costs tokens. Rul
 - **Pair awareness.** Skills in this book pair with each other. `grill-me` → `slice-it` → `review-it` is a chain. New skills should state what they pair with or follow.
 - **Standalone skills** explicitly say so in the description. They don't assume prior context from other skills.
 - **Deviation from convention** is allowed but must be flagged. If a skill suggests going against repo patterns, it says so explicitly.
+
+## Forge / agent conventions
+
+Skills `forge-init` and `grill-agents` support running Claude Code as an agent in Docker:
+
+- `.agent.Dockerfile` — container image for agent runs (Node 20+, git, non-root `agent` user, `WORKDIR /workspace`)
+- `.agent.md` — conventions file loaded by agent at runtime (stack, commands, architecture, rules)
+- `.agent.queue/pending/` — spec files written by `grill-agents`, one per agent task
+
+`.agent.md` follows same token discipline as skills: no filler, concrete commands only, `# Architecture` section left for user.
 
 ## What not to add
 
