@@ -29,6 +29,7 @@ Standalone (invoke anytime): `grooming-it`, `qa-it`, `refactor-it`
 | `qa-it` | Post-ship or anytime | Grouped human QA checklist from git diff vs main |
 | `refactor-it` | Anytime | Slice-it compatible refactor plan from file analysis |
 | `forge-init` | Project setup | `.agent.Dockerfile` + `.agent.md` for agent runs |
+| `forge-rule` | Anytime | Persists current convention as `.agent/rules/<name>.md` for forge MCP |
 
 ## Skill anatomy
 

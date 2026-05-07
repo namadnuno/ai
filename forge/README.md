@@ -1,9 +1,40 @@
 # Agent Pipeline
 
-Portable multi-agent coding pipeline.
-**Programmer → Reviewer → push branch → open GitLab MR**
+Portable multi-agent coding pipeline + persistent memory layer.
+**Programmer → Reviewer → push branch → open GitLab MR**, plus an MCP server that exposes a curated repo overview and rules to every Claude session.
 
 Designed to drop into any repo with a single `.agent/` folder, then customised per project via two files.
+
+## Memory layer (MCP `forge`)
+
+Independent of the multi-agent pipeline. Cuts cold-start cost on every Claude session.
+
+On install, forge writes:
+- `.agent/mcp/server.js` — Node stdio MCP server (deps installed via `npm install`)
+- `.agent/overview.md` — your repo picture (stack, entry points, dirs, conventions)
+- `.agent/rules/*.md` — project rules with frontmatter (`name`, `description`, `globs`)
+- `.mcp.json` — points Claude Code at the server (merged if file already exists)
+- `CLAUDE.md` stub — tells Claude to call `repo_overview` first, `list_rules` before edits
+
+Tools exposed:
+
+| Tool | Purpose |
+|---|---|
+| `repo_overview` | Returns `.agent/overview.md` — call once at session start |
+| `list_rules` | Names + descriptions + globs only. Cheap. Use to decide what to pull |
+| `get_rule(name)` | Full body of a rule. Call before editing files matching its globs |
+
+Pull-only by design — content stays out of context until needed. Goal: skip the 20-grep cold scan every session.
+
+Bootstrap a project's memory:
+
+```bash
+./.agent/analyze.sh              # scaffolds rules dir + overview template
+$EDITOR .agent/overview.md       # fill in repo picture
+$EDITOR .agent/rules/example.md  # write your first rule
+```
+
+Mid-session capture: invoke the `forge-rule` skill ("save this as a rule") to write a new rule from current context.
 
 ## How portability works
 

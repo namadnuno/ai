@@ -1,0 +1,19 @@
+{
+  "name": "forge-mcp",
+  "version": "0.1.0",
+  "description": "Forge memory MCP server — exposes repo overview and rules to Claude sessions",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "forge-mcp": "server.js"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
