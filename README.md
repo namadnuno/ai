@@ -35,6 +35,8 @@ Run these on every machine. That's it. To update:
 | `ship-it` | "ship it", "wrap this up", "write the PR" | Test suite + commits + PR description |
 | `qa-it` | "qa this", "what should I test", "qa checklist" | Grouped human QA checklist from git diff |
 | `refactor-it` | "this file is too big", "refactor this", "split this component" | Slice-it compatible refactor plan |
+| `split-component` | `/split-component <path>`, "split this component", "component is too big" | Extracted sub-components + hooks written to disk |
+| `split-function` | `/split-function <path> <name>`, "split this function", "hook is too big" | Extracted functions + hooks written to disk |
 | `write-skill` | "write a skill", "create a skill", "add a skill for X" | Ready-to-commit SKILL.md + README update |
 | `missing-it` | "what am I missing", "what's not covered", "am I forgetting anything" | Prioritized gaps list: tests, edge cases, error paths |
 | `tdd` | "use TDD", "test-first", "red-green-refactor", "write tests before code" | Red→green→refactor loop with behavior checklist |
