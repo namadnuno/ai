@@ -61,6 +61,9 @@ Drop isolated Docker agents into any project. Agents run unattended, work queued
 # Install into any repo (one-liner)
 curl -fsSL https://raw.githubusercontent.com/namadnuno/ai/main/forge/install.sh | bash
 
+# Update existing install (preserves overview.md and rules/)
+curl -fsSL https://raw.githubusercontent.com/namadnuno/ai/main/forge/update.sh | bash
+
 # Generate project config
 /forge-init
 

@@ -46,6 +46,26 @@ mkdir -p "$REPO_ROOT/.agent/rules"
 
 print_ok "forge scripts updated"
 
+# Upsert CLAUDE.local.md forge block with latest template
+CLAUDE_LOCAL="$REPO_ROOT/CLAUDE.local.md"
+STUB="$DEST/templates/claude-stub.template.md"
+if [ ! -f "$CLAUDE_LOCAL" ]; then
+  cp "$STUB" "$CLAUDE_LOCAL"
+  print_ok "created CLAUDE.local.md with forge memory section"
+elif grep -q 'forge:memory:start' "$CLAUDE_LOCAL" 2>/dev/null; then
+  tmp_md="$(mktemp)"
+  awk -v tpl="$STUB" '
+    /<!-- forge:memory:start -->/ { in_block=1; while ((getline line < tpl) > 0) print line; close(tpl); next }
+    /<!-- forge:memory:end -->/ { if (in_block) { in_block=0; next } }
+    !in_block { print }
+  ' "$CLAUDE_LOCAL" > "$tmp_md" && mv "$tmp_md" "$CLAUDE_LOCAL"
+  print_ok "updated forge memory block in CLAUDE.local.md"
+else
+  printf '\n' >> "$CLAUDE_LOCAL"
+  cat "$STUB" >> "$CLAUDE_LOCAL"
+  print_ok "appended forge memory section to CLAUDE.local.md"
+fi
+
 # Update MCP server deps
 if command -v npm &>/dev/null; then
   echo -e "  Updating MCP server deps..."
