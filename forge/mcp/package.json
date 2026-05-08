@@ -11,7 +11,8 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.4"
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "minimatch": "^10.0.0"
   },
   "engines": {
     "node": ">=18"

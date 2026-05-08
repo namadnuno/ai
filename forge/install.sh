@@ -47,6 +47,7 @@ grep -qxF '.agent.Dockerfile' "$EXCLUDE" 2>/dev/null || echo '.agent.Dockerfile'
 grep -qxF '.agent.md' "$EXCLUDE" 2>/dev/null || echo '.agent.md' >> "$EXCLUDE"
 grep -qxF '.agent.config' "$EXCLUDE" 2>/dev/null || echo '.agent.config' >> "$EXCLUDE"
 grep -qxF '.mcp.json' "$EXCLUDE" 2>/dev/null || echo '.mcp.json' >> "$EXCLUDE"
+grep -qxF 'CLAUDE.local.md' "$EXCLUDE" 2>/dev/null || echo 'CLAUDE.local.md' >> "$EXCLUDE"
 
 # ─── Memory layer scaffold ──────────────────────────────────────────
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -84,17 +85,26 @@ EOF_MCP
   print_ok "wrote .mcp.json"
 fi
 
-# CLAUDE.md stub — append once, idempotent via marker
-CLAUDE_MD="$REPO_ROOT/CLAUDE.md"
-if [ -f "$CLAUDE_MD" ]; then
-  if ! grep -q 'forge:memory:start' "$CLAUDE_MD" 2>/dev/null; then
-    printf '\n' >> "$CLAUDE_MD"
-    cat "$DEST/templates/claude-stub.template.md" >> "$CLAUDE_MD"
-    print_ok "appended forge memory section to CLAUDE.md"
+# CLAUDE.local.md stub — user-local, gitignored, append once idempotent via marker
+CLAUDE_LOCAL="$REPO_ROOT/CLAUDE.local.md"
+if [ -f "$CLAUDE_LOCAL" ]; then
+  if ! grep -q 'forge:memory:start' "$CLAUDE_LOCAL" 2>/dev/null; then
+    printf '\n' >> "$CLAUDE_LOCAL"
+    cat "$DEST/templates/claude-stub.template.md" >> "$CLAUDE_LOCAL"
+    print_ok "appended forge memory section to CLAUDE.local.md"
   fi
 else
-  cp "$DEST/templates/claude-stub.template.md" "$CLAUDE_MD"
-  print_ok "created CLAUDE.md with forge memory section"
+  cp "$DEST/templates/claude-stub.template.md" "$CLAUDE_LOCAL"
+  print_ok "created CLAUDE.local.md with forge memory section"
+fi
+
+# Ensure CLAUDE.local.md is gitignored
+GITIGNORE="$REPO_ROOT/.gitignore"
+if [ -f "$GITIGNORE" ]; then
+  grep -qxF 'CLAUDE.local.md' "$GITIGNORE" 2>/dev/null || { echo 'CLAUDE.local.md' >> "$GITIGNORE"; print_ok "added CLAUDE.local.md to .gitignore"; }
+else
+  echo 'CLAUDE.local.md' > "$GITIGNORE"
+  print_ok "created .gitignore with CLAUDE.local.md"
 fi
 
 # Install MCP server deps

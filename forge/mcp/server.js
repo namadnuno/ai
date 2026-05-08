@@ -11,6 +11,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, basename, resolve } from "node:path";
+import { minimatch } from "minimatch";
 
 const ROOT = process.env.FORGE_ROOT || process.cwd();
 const OVERVIEW_PATH = resolve(ROOT, ".agent/overview.md");
@@ -113,6 +114,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         additionalProperties: false,
       },
     },
+    {
+      name: "pre_edit",
+      description:
+        "Call before editing a file. Returns the full body of every rule whose globs match the given path. Returns empty if no rules apply. Replaces the two-step list_rules → get_rule flow.",
+      inputSchema: {
+        type: "object",
+        properties: { path: { type: "string", description: "File path relative to repo root (e.g. src/components/Foo.tsx)" } },
+        required: ["path"],
+        additionalProperties: false,
+      },
+    },
   ],
 }));
 
@@ -150,6 +162,27 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     }
     const head = `# ${rule.name}\n\n${rule.description}\n\nGlobs: ${rule.globs.join(", ") || "(none)"}\n\n---\n\n`;
     return { content: [{ type: "text", text: head + rule.body }] };
+  }
+
+  if (name === "pre_edit") {
+    if (!args.path) {
+      return { content: [{ type: "text", text: "error: path required" }], isError: true };
+    }
+    const rules = await listRules();
+    const matching = rules.filter((r) =>
+      r.globs.length > 0 && r.globs.some((g) => minimatch(args.path, g, { matchBase: false }))
+    );
+    if (matching.length === 0) {
+      return { content: [{ type: "text", text: "(no rules match this path)" }] };
+    }
+    const parts = await Promise.all(
+      matching.map(async (r) => {
+        const full = await getRule(r.name);
+        const head = `# ${r.name}\n\n${r.description}\n\nGlobs: ${r.globs.join(", ")}\n\n---\n\n`;
+        return head + (full?.body ?? "");
+      })
+    );
+    return { content: [{ type: "text", text: parts.join("\n\n---\n\n") }] };
   }
 
   return { content: [{ type: "text", text: `unknown tool: ${name}` }], isError: true };
