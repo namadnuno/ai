@@ -12,8 +12,16 @@ import {
 import { readFile, readdir, stat } from "node:fs/promises";
 import { join, basename, resolve } from "node:path";
 import { minimatch } from "minimatch";
+import { openDb, syncIndex, getAllPaths, searchContent as queryContent, saveContext, listContext, getContext } from "./indexer.js";
 
 const ROOT = process.env.FORGE_ROOT || process.cwd();
+
+let db = null;
+try {
+  db = openDb(ROOT);
+} catch {
+  // better-sqlite3 unavailable or .agent/ missing — search tools disabled
+}
 const OVERVIEW_PATH = resolve(ROOT, ".agent/overview.md");
 const RULES_DIR = resolve(ROOT, ".agent/rules");
 
@@ -115,6 +123,64 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       },
     },
     {
+      name: "search_files",
+      description:
+        "Search indexed repo files by glob pattern. Respects .gitignore. Returns matching file paths. Use instead of filesystem grepping.",
+      inputSchema: {
+        type: "object",
+        properties: { pattern: { type: "string", description: "Glob pattern, e.g. src/**/*.ts" } },
+        required: ["pattern"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: "search_content",
+      description:
+        "Full-text search across indexed repo file contents. Returns ranked results with excerpts. Respects .gitignore. Supports FTS5 syntax: bare words, quoted phrases, field:value.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "FTS5 query string" },
+          limit: { type: "number", description: "Max results (default 20)" },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: "save_context",
+      description:
+        "Persist an insight about a file or the project into the forge knowledge base. Use after understanding something non-obvious: architecture decisions, gotchas, patterns, module purpose. Survives across sessions. Keep body to 1-3 sentences.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          scope: { type: "string", description: "File path (e.g. src/auth/middleware.ts) or '__project__' for repo-level insight" },
+          key: { type: "string", description: "Category: overview | patterns | gotchas | why | deps" },
+          body: { type: "string", description: "The insight. 1-3 sentences max. Non-obvious only." },
+        },
+        required: ["scope", "key", "body"],
+        additionalProperties: false,
+      },
+    },
+    {
+      name: "list_context",
+      description:
+        "List all saved knowledge base entries (scope + key only, no bodies). Cheap call — use to discover what's been learned, then call get_context to pull specific bodies.",
+      inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    },
+    {
+      name: "get_context",
+      description:
+        "Retrieve saved insights from the forge knowledge base. Pass scope to get entries for a specific file or '__project__'. Omit scope to get everything (use sparingly — prefer list_context first).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          scope: { type: "string", description: "File path or '__project__'. Omit for all entries." },
+        },
+        additionalProperties: false,
+      },
+    },
+    {
       name: "pre_edit",
       description:
         "Call before editing a file. Returns the full body of every rule whose globs match the given path. Returns empty if no rules apply. Replaces the two-step list_rules → get_rule flow.",
@@ -162,6 +228,44 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     }
     const head = `# ${rule.name}\n\n${rule.description}\n\nGlobs: ${rule.globs.join(", ") || "(none)"}\n\n---\n\n`;
     return { content: [{ type: "text", text: head + rule.body }] };
+  }
+
+  if (name === "search_files") {
+    if (!db) return { content: [{ type: "text", text: "error: index unavailable (run npm install in .agent/mcp)" }], isError: true };
+    if (!args.pattern) return { content: [{ type: "text", text: "error: pattern required" }], isError: true };
+    syncIndex(ROOT, db);
+    const matches = getAllPaths(db).filter((p) => minimatch(p, args.pattern, { matchBase: false }));
+    return { content: [{ type: "text", text: JSON.stringify(matches) }] };
+  }
+
+  if (name === "search_content") {
+    if (!db) return { content: [{ type: "text", text: "error: index unavailable (run npm install in .agent/mcp)" }], isError: true };
+    if (!args.query) return { content: [{ type: "text", text: "error: query required" }], isError: true };
+    syncIndex(ROOT, db);
+    const results = queryContent(db, args.query, args.limit ?? 20);
+    return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
+  }
+
+  if (name === "save_context") {
+    if (!db) return { content: [{ type: "text", text: "error: index unavailable (run npm install in .agent/mcp)" }], isError: true };
+    const { scope, key, body } = args;
+    if (!scope || !key || !body) return { content: [{ type: "text", text: "error: scope, key, and body required" }], isError: true };
+    saveContext(db, scope, key, body);
+    return { content: [{ type: "text", text: `saved: ${scope} / ${key}` }] };
+  }
+
+  if (name === "list_context") {
+    if (!db) return { content: [{ type: "text", text: "error: index unavailable (run npm install in .agent/mcp)" }], isError: true };
+    const entries = listContext(db);
+    if (entries.length === 0) return { content: [{ type: "text", text: "(no context saved yet)" }] };
+    return { content: [{ type: "text", text: JSON.stringify(entries, null, 2) }] };
+  }
+
+  if (name === "get_context") {
+    if (!db) return { content: [{ type: "text", text: "error: index unavailable (run npm install in .agent/mcp)" }], isError: true };
+    const entries = getContext(db, args.scope);
+    if (entries.length === 0) return { content: [{ type: "text", text: "(no context saved for this scope)" }] };
+    return { content: [{ type: "text", text: JSON.stringify(entries, null, 2) }] };
   }
 
   if (name === "pre_edit") {

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
+    "better-sqlite3": "^12.9.0",
     "minimatch": "^10.0.0"
   },
   "engines": {
