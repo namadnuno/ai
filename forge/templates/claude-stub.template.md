@@ -3,11 +3,26 @@
 
 This repo ships a memory MCP server. Use it to skip cold-start scans.
 
-- **At session start**, call `repo_overview` once to get stack, entry points, key dirs, conventions.
-- **Before editing any file**, call `pre_edit` with the file path. It returns full bodies of all matching rules in one call. Act on any rules returned before proceeding.
-- **Do not** bulk-grep the codebase to derive things `repo_overview` already states.
+**Session start — always do both:**
+1. `repo_overview` — stack, entry points, dirs, conventions (~500 tokens, one call)
+2. `list_context` — accumulated cross-session insights (keys only, cheap). Pull bodies with `get_context(scope)` only for areas you're about to work in.
 
-Rules live in `.agent/rules/`. Overview lives in `.agent/overview.md`. Edit directly or run `./.agent/analyze.sh` to scaffold.
+**Searching — use index, not filesystem:**
+- `search_files(pattern)` — glob match against indexed files (respects .gitignore)
+- `search_content(query)` — FTS5 ranked search across file contents
+
+Do not bulk-grep or tree-walk the codebase for things these tools can answer.
+
+**Before editing any file:**
+Call `pre_edit(path)` — returns all rules whose globs match the path. Rules are mandatory, not advisory.
+
+**After learning something non-obvious:**
+Call `save_context(scope, key, body)` — persists insight for future sessions.
+- `scope`: file path or `__project__`
+- `key`: `overview` | `patterns` | `gotchas` | `why` | `deps`
+- `body`: 1-3 sentences. Non-obvious only — not what the code does.
+
+Rules live in `.agent/rules/`. Overview lives in `.agent/overview.md`.
 
 ### REQUIRED: rule enforcement on every file edit
 
