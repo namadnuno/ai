@@ -13,9 +13,6 @@ This repo ships a memory MCP server. Use it to skip cold-start scans.
 
 Do not bulk-grep or tree-walk the codebase for things these tools can answer.
 
-**Before editing any file:**
-Call `pre_edit(path)` — returns all rules whose globs match the path. Rules are mandatory, not advisory.
-
 **After learning something non-obvious:**
 Call `save_context(scope, key, body)` — persists insight for future sessions.
 - `scope`: file path or `__project__`
@@ -24,13 +21,13 @@ Call `save_context(scope, key, body)` — persists insight for future sessions.
 
 Rules live in `.agent/rules/`. Overview lives in `.agent/overview.md`.
 
-### REQUIRED: rule enforcement on every file edit
+### REQUIRED: before every file edit
 
 Before calling Edit, Write, or any file-modification tool:
-1. Call `mcp__forge__pre_edit` with the target file path.
-2. Read every rule returned. Rules are **mandatory** — not advisory.
-3. If a rule conflicts with the task, surface the conflict explicitly before proceeding.
-4. Never skip `pre_edit` to save time. No exceptions.
+1. Call `pre_edit(path)` — returns all matching rules. Rules are **mandatory**.
+2. Call `get_context(path)` — returns saved insights for that file. Act on any returned.
+3. If a rule or insight conflicts with the task, surface it explicitly before proceeding.
+4. Never skip either call. No exceptions.
 
-If `pre_edit` returns no rules, proceed. If MCP is unavailable, state it and continue — but do not silently skip the step.
+If MCP is unavailable, state it and continue — but do not silently skip the steps.
 <!-- forge:memory:end -->
