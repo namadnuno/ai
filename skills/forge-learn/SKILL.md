@@ -10,7 +10,7 @@ description: >
 
 # forge-learn
 
-Saves codebase insights to the forge DB via `save_context`. Future sessions retrieve via `list_context` + `get_context`.
+Write-only skill. Saves codebase insights to the forge DB via `save_context`. No reads — go straight to saving.
 
 ## When to trigger
 
@@ -39,7 +39,7 @@ Saved 3 insights to forge:
 
 ## Anti-patterns
 
+- Don't call `list_context` or `get_context` before saving — this skill is write-only
 - Don't save what's obvious from reading the code (function names, file structure)
 - Don't write more than 3 sentences — if it needs more, it's two separate keys
 - Don't save current task state or in-progress work — insights only
-- Don't use `get_context` without `list_context` first (wastes tokens on unknown scope)

@@ -183,7 +183,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     {
       name: "pre_edit",
       description:
-        "Call before editing a file. Returns the full body of every rule whose globs match the given path. Returns empty if no rules apply. Replaces the two-step list_rules → get_rule flow.",
+        "Call before editing a file. Returns all matching rules (mandatory conventions) AND all saved context insights for that path — everything needed before touching the file, in one call.",
       inputSchema: {
         type: "object",
         properties: { path: { type: "string", description: "File path relative to repo root (e.g. src/components/Foo.tsx)" } },
@@ -272,21 +272,37 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
     if (!args.path) {
       return { content: [{ type: "text", text: "error: path required" }], isError: true };
     }
+    const sections = [];
+
+    // Rules
     const rules = await listRules();
     const matching = rules.filter((r) =>
       r.globs.length > 0 && r.globs.some((g) => minimatch(args.path, g, { matchBase: false }))
     );
-    if (matching.length === 0) {
-      return { content: [{ type: "text", text: "(no rules match this path)" }] };
+    if (matching.length > 0) {
+      const parts = await Promise.all(
+        matching.map(async (r) => {
+          const full = await getRule(r.name);
+          const head = `# rule: ${r.name}\n\n${r.description}\n\nGlobs: ${r.globs.join(", ")}\n\n---\n\n`;
+          return head + (full?.body ?? "");
+        })
+      );
+      sections.push(`## Rules\n\n${parts.join("\n\n---\n\n")}`);
     }
-    const parts = await Promise.all(
-      matching.map(async (r) => {
-        const full = await getRule(r.name);
-        const head = `# ${r.name}\n\n${r.description}\n\nGlobs: ${r.globs.join(", ")}\n\n---\n\n`;
-        return head + (full?.body ?? "");
-      })
-    );
-    return { content: [{ type: "text", text: parts.join("\n\n---\n\n") }] };
+
+    // Saved context
+    if (db) {
+      const ctx = getContext(db, args.path);
+      if (ctx.length > 0) {
+        const ctxText = ctx.map((e) => `**${e.key}**: ${e.body}`).join("\n");
+        sections.push(`## Saved context\n\n${ctxText}`);
+      }
+    }
+
+    if (sections.length === 0) {
+      return { content: [{ type: "text", text: "(no rules or saved context for this path)" }] };
+    }
+    return { content: [{ type: "text", text: sections.join("\n\n---\n\n") }] };
   }
 
   return { content: [{ type: "text", text: `unknown tool: ${name}` }], isError: true };

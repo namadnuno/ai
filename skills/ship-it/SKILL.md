@@ -1,38 +1,27 @@
 ---
 name: ship-it
-description: Final integration check — run tests, generate commits, draft PR. Use when user says "ship it," "wrap this up," "ready to commit," "write the PR," "we're done." Works with or without slice-it/grill-me context.
+description: Draft PR title and description from current git changes. Use when user says "ship it," "wrap this up," "write the PR," "we're done," "ready to commit."
 ---
 
 # Ship It
 
-Two modes — detect from context:
-- **Slice mode**: slices exist → one commit per slice, PR from grill-me scope
-- **Standalone**: no context → `git diff main`, infer changes, derive commits + PR
+## Process
 
-## Steps
-
-1. Run test suite. Red → stop, fix first.
-2. Scope check. Slice mode: verify grill-me scope covered. Standalone: summarize diff in 1–2 sentences.
-3. Flag unexpected diff — out-of-scope files, debug code, dead imports.
-4. Commits. Slice mode: one per slice. Standalone: one per logical group. Subject = intent.
-5. Draft PR.
-
-## PR format
-
-Bullets only. No headers. No prose. Max 5.
-
-```
-- [what + why]
-```
-
-Add `⚠️ [risk]` only if something flagged and accepted.
-
-## Anti-patterns
-
-- Mega-commit — kills bisect
-- Subject describes diff not intent
-- Skipping full suite
+1. Run `git status` and `git diff main`. No changes → stop, tell user nothing to ship.
+2. Derive conventional commit title from diff intent (not diff content).
+3. Write PR description: bullets only, max 5, each = what + why.
 
 ## Output
 
-Suite: ✓ / failures | Commits: subject lines | PR: ready to paste
+```
+<type>(<scope>): <subject>
+
+- [what + why]
+- [what + why]
+```
+
+## Anti-patterns
+
+- Subject describes diff not intent
+- More than 5 bullets
+- Prose in description

@@ -24,10 +24,10 @@ Rules live in `.agent/rules/`. Overview lives in `.agent/overview.md`.
 ### REQUIRED: before every file edit
 
 Before calling Edit, Write, or any file-modification tool:
-1. Call `pre_edit(path)` — returns all matching rules. Rules are **mandatory**.
-2. Call `get_context(path)` — returns saved insights for that file. Act on any returned.
+1. Call `pre_edit(path)` — returns matching rules **and** saved context insights for that file in one call.
+2. Rules are **mandatory**, not advisory. Insights inform your approach.
 3. If a rule or insight conflicts with the task, surface it explicitly before proceeding.
-4. Never skip either call. No exceptions.
+4. Never skip `pre_edit`. No exceptions.
 
-If MCP is unavailable, state it and continue — but do not silently skip the steps.
+If MCP is unavailable, state it and continue — but do not silently skip the step.
 <!-- forge:memory:end -->
