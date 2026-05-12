@@ -57,6 +57,7 @@ const SCHEMA = `
   );
 `;
 
+/** @param {string} root @returns {import("better-sqlite3").Database} */
 export function openDb(root) {
   const db = new Database(resolve(root, DB_RELATIVE));
   db.pragma("journal_mode = WAL");
@@ -67,10 +68,12 @@ export function openDb(root) {
   return db;
 }
 
+/** @param {import("better-sqlite3").Database} db */
 export function closeDb(db) {
   db.close();
 }
 
+/** @param {string} root @param {import("better-sqlite3").Database} db @returns {SyncStats} */
 export function syncIndex(root, db) {
   const lastSynced = db.prepare("SELECT value FROM meta WHERE key = 'last_synced'").get();
   if (lastSynced && Date.now() - parseInt(lastSynced.value) < SYNC_TTL_MS) {
@@ -126,10 +129,12 @@ export function syncIndex(root, db) {
   return { indexed, skipped, deleted };
 }
 
+/** @param {import("better-sqlite3").Database} db @returns {string[]} */
 export function getAllPaths(db) {
   return db.prepare("SELECT path FROM files ORDER BY path").all().map((r) => r.path);
 }
 
+/** @param {import("better-sqlite3").Database} db @param {string} query @param {number} [limit] @returns {SearchResult[]} */
 export function searchContent(db, query, limit = 20) {
   return db.prepare(`
     SELECT f.path,
@@ -143,6 +148,7 @@ export function searchContent(db, query, limit = 20) {
   `).all(query, limit);
 }
 
+/** @param {import("better-sqlite3").Database} db @param {string} scope @param {string} key @param {string} body */
 export function saveContext(db, scope, key, body) {
   db.prepare(`
     INSERT INTO context (scope, key, body, updated) VALUES (?, ?, ?, ?)
@@ -150,10 +156,12 @@ export function saveContext(db, scope, key, body) {
   `).run(scope, key, body, Date.now());
 }
 
+/** @param {import("better-sqlite3").Database} db @returns {ContextSummary[]} */
 export function listContext(db) {
   return db.prepare("SELECT scope, key, updated FROM context ORDER BY scope, key").all();
 }
 
+/** @param {import("better-sqlite3").Database} db @param {string} [scope] @returns {ContextEntry[]} */
 export function getContext(db, scope) {
   if (scope) {
     return db.prepare("SELECT key, body, updated FROM context WHERE scope = ? ORDER BY key").all(scope);

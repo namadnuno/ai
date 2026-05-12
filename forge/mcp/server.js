@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // Forge memory MCP server — stdio.
-// Exposes repo overview + user-authored rules to Claude sessions.
-// Reads from .agent/overview.md and .agent/rules/*.md relative to cwd.
+// Reads from .agent/overview.md and .agent/rules/ relative to cwd.
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -9,10 +8,17 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { readFile, readdir, stat } from "node:fs/promises";
-import { join, basename, resolve } from "node:path";
-import { minimatch } from "minimatch";
-import { openDb, syncIndex, getAllPaths, searchContent as queryContent, saveContext, listContext, getContext } from "./indexer.js";
+import { resolve } from "node:path";
+import { openDb } from "./indexer.js";
+import { RepoOverviewHandler } from "./handlers/repo_overview.js";
+import { ListRulesHandler } from "./handlers/list_rules.js";
+import { GetRuleHandler } from "./handlers/get_rule.js";
+import { SearchFilesHandler } from "./handlers/search_files.js";
+import { SearchContentHandler } from "./handlers/search_content.js";
+import { SaveContextHandler } from "./handlers/save_context.js";
+import { ListContextHandler } from "./handlers/list_context.js";
+import { GetContextHandler } from "./handlers/get_context.js";
+import { PreEditHandler } from "./handlers/pre_edit.js";
 
 const ROOT = process.env.FORGE_ROOT || process.cwd();
 
@@ -22,75 +28,30 @@ try {
 } catch {
   // better-sqlite3 unavailable or .agent/ missing — search tools disabled
 }
-const OVERVIEW_PATH = resolve(ROOT, ".agent/overview.md");
-const RULES_DIR = resolve(ROOT, ".agent/rules");
 
-async function readIfExists(path) {
-  try {
-    return await readFile(path, "utf8");
-  } catch (err) {
-    if (err.code === "ENOENT") return null;
-    throw err;
-  }
-}
+const ctx = {
+  db,
+  ROOT,
+  OVERVIEW_PATH: resolve(ROOT, ".agent/overview.md"),
+  RULES_DIR: resolve(ROOT, ".agent/rules"),
+};
 
-function parseFrontmatter(src) {
-  const match = src.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
-  if (!match) return { meta: {}, body: src };
-  const meta = {};
-  for (const line of match[1].split("\n")) {
-    const m = line.match(/^([a-zA-Z_][\w-]*)\s*:\s*(.*)$/);
-    if (!m) continue;
-    const key = m[1];
-    let val = m[2].trim();
-    if (val.startsWith("[") && val.endsWith("]")) {
-      val = val
-        .slice(1, -1)
-        .split(",")
-        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
-        .filter(Boolean);
-    } else {
-      val = val.replace(/^["']|["']$/g, "");
-    }
-    meta[key] = val;
-  }
-  return { meta, body: match[2].trim() };
-}
+/** @type {HandlerClass[]} */
+const HANDLER_CLASSES = [
+  RepoOverviewHandler,
+  ListRulesHandler,
+  GetRuleHandler,
+  SearchFilesHandler,
+  SearchContentHandler,
+  SaveContextHandler,
+  ListContextHandler,
+  GetContextHandler,
+  PreEditHandler,
+];
 
-async function listRules() {
-  let entries;
-  try {
-    entries = await readdir(RULES_DIR);
-  } catch (err) {
-    if (err.code === "ENOENT") return [];
-    throw err;
-  }
-  const rules = [];
-  for (const file of entries) {
-    if (!file.endsWith(".md")) continue;
-    const path = join(RULES_DIR, file);
-    const st = await stat(path);
-    if (!st.isFile()) continue;
-    const src = await readFile(path, "utf8");
-    const { meta } = parseFrontmatter(src);
-    rules.push({
-      name: meta.name || basename(file, ".md"),
-      description: meta.description || "",
-      globs: Array.isArray(meta.globs) ? meta.globs : meta.globs ? [meta.globs] : [],
-      file,
-    });
-  }
-  return rules;
-}
-
-async function getRule(name) {
-  const rules = await listRules();
-  const match = rules.find((r) => r.name === name);
-  if (!match) return null;
-  const src = await readFile(join(RULES_DIR, match.file), "utf8");
-  const { body } = parseFrontmatter(src);
-  return { ...match, body };
-}
+const handlers = Object.fromEntries(
+  HANDLER_CLASSES.map((H) => [H.schema.name, new H(ctx)])
+);
 
 const server = new Server(
   { name: "forge", version: "0.1.0" },
@@ -98,214 +59,16 @@ const server = new Server(
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    {
-      name: "repo_overview",
-      description:
-        "Returns the repo's curated overview (stack, entry points, key dirs, conventions). Call this once at session start before exploring the codebase.",
-      inputSchema: { type: "object", properties: {}, additionalProperties: false },
-    },
-    {
-      name: "list_rules",
-      description:
-        "Lists all project rules with name, description, and matching globs. Cheap call — use to decide which rules to pull. Pull a rule body via get_rule before editing files matching its globs.",
-      inputSchema: { type: "object", properties: {}, additionalProperties: false },
-    },
-    {
-      name: "get_rule",
-      description:
-        "Returns the full body of a rule by name. Call before editing files matching the rule's globs.",
-      inputSchema: {
-        type: "object",
-        properties: { name: { type: "string" } },
-        required: ["name"],
-        additionalProperties: false,
-      },
-    },
-    {
-      name: "search_files",
-      description:
-        "Search indexed repo files by glob pattern. Respects .gitignore. Returns matching file paths. Use instead of filesystem grepping.",
-      inputSchema: {
-        type: "object",
-        properties: { pattern: { type: "string", description: "Glob pattern, e.g. src/**/*.ts" } },
-        required: ["pattern"],
-        additionalProperties: false,
-      },
-    },
-    {
-      name: "search_content",
-      description:
-        "Full-text search across indexed repo file contents. Returns ranked results with excerpts. Respects .gitignore. Supports FTS5 syntax: bare words, quoted phrases, field:value.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          query: { type: "string", description: "FTS5 query string" },
-          limit: { type: "number", description: "Max results (default 20)" },
-        },
-        required: ["query"],
-        additionalProperties: false,
-      },
-    },
-    {
-      name: "save_context",
-      description:
-        "Persist an insight about a file or the project into the forge knowledge base. Use after understanding something non-obvious: architecture decisions, gotchas, patterns, module purpose. Survives across sessions. Keep body to 1-3 sentences.",
-      inputSchema: {
-        type: "object",
-        properties: {
-          scope: { type: "string", description: "File path (e.g. src/auth/middleware.ts) or '__project__' for repo-level insight" },
-          key: { type: "string", description: "Category: overview | patterns | gotchas | why | deps" },
-          body: { type: "string", description: "The insight. 1-3 sentences max. Non-obvious only." },
-        },
-        required: ["scope", "key", "body"],
-        additionalProperties: false,
-      },
-    },
-    {
-      name: "list_context",
-      description:
-        "List all saved knowledge base entries (scope + key only, no bodies). Cheap call — use to discover what's been learned, then call get_context to pull specific bodies.",
-      inputSchema: { type: "object", properties: {}, additionalProperties: false },
-    },
-    {
-      name: "get_context",
-      description:
-        "Retrieve saved insights from the forge knowledge base. Pass scope to get entries for a specific file or '__project__'. Omit scope to get everything (use sparingly — prefer list_context first).",
-      inputSchema: {
-        type: "object",
-        properties: {
-          scope: { type: "string", description: "File path or '__project__'. Omit for all entries." },
-        },
-        additionalProperties: false,
-      },
-    },
-    {
-      name: "pre_edit",
-      description:
-        "Call before editing a file. Returns all matching rules (mandatory conventions) AND all saved context insights for that path — everything needed before touching the file, in one call.",
-      inputSchema: {
-        type: "object",
-        properties: { path: { type: "string", description: "File path relative to repo root (e.g. src/components/Foo.tsx)" } },
-        required: ["path"],
-        additionalProperties: false,
-      },
-    },
-  ],
+  tools: HANDLER_CLASSES.map((H) => H.schema),
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: args = {} } = req.params;
-
-  if (name === "repo_overview") {
-    const content = await readIfExists(OVERVIEW_PATH);
-    if (content === null) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: "(no overview yet — create .agent/overview.md or run ./.agent/analyze.sh)",
-          },
-        ],
-      };
-    }
-    return { content: [{ type: "text", text: content }] };
+  const handler = handlers[name];
+  if (!handler) {
+    return { content: [{ type: "text", text: `unknown tool: ${name}` }], isError: true };
   }
-
-  if (name === "list_rules") {
-    const rules = await listRules();
-    const summary = rules.map(({ name, description, globs }) => ({ name, description, globs }));
-    return { content: [{ type: "text", text: JSON.stringify(summary, null, 2) }] };
-  }
-
-  if (name === "get_rule") {
-    if (!args.name) {
-      return { content: [{ type: "text", text: "error: name required" }], isError: true };
-    }
-    const rule = await getRule(args.name);
-    if (!rule) {
-      return { content: [{ type: "text", text: `error: rule '${args.name}' not found` }], isError: true };
-    }
-    const head = `# ${rule.name}\n\n${rule.description}\n\nGlobs: ${rule.globs.join(", ") || "(none)"}\n\n---\n\n`;
-    return { content: [{ type: "text", text: head + rule.body }] };
-  }
-
-  if (name === "search_files") {
-    if (!db) return { content: [{ type: "text", text: "error: index unavailable (run npm install in .agent/mcp)" }], isError: true };
-    if (!args.pattern) return { content: [{ type: "text", text: "error: pattern required" }], isError: true };
-    syncIndex(ROOT, db);
-    const matches = getAllPaths(db).filter((p) => minimatch(p, args.pattern, { matchBase: false }));
-    return { content: [{ type: "text", text: JSON.stringify(matches) }] };
-  }
-
-  if (name === "search_content") {
-    if (!db) return { content: [{ type: "text", text: "error: index unavailable (run npm install in .agent/mcp)" }], isError: true };
-    if (!args.query) return { content: [{ type: "text", text: "error: query required" }], isError: true };
-    syncIndex(ROOT, db);
-    const results = queryContent(db, args.query, args.limit ?? 20);
-    return { content: [{ type: "text", text: JSON.stringify(results, null, 2) }] };
-  }
-
-  if (name === "save_context") {
-    if (!db) return { content: [{ type: "text", text: "error: index unavailable (run npm install in .agent/mcp)" }], isError: true };
-    const { scope, key, body } = args;
-    if (!scope || !key || !body) return { content: [{ type: "text", text: "error: scope, key, and body required" }], isError: true };
-    saveContext(db, scope, key, body);
-    return { content: [{ type: "text", text: `saved: ${scope} / ${key}` }] };
-  }
-
-  if (name === "list_context") {
-    if (!db) return { content: [{ type: "text", text: "error: index unavailable (run npm install in .agent/mcp)" }], isError: true };
-    const entries = listContext(db);
-    if (entries.length === 0) return { content: [{ type: "text", text: "(no context saved yet)" }] };
-    return { content: [{ type: "text", text: JSON.stringify(entries, null, 2) }] };
-  }
-
-  if (name === "get_context") {
-    if (!db) return { content: [{ type: "text", text: "error: index unavailable (run npm install in .agent/mcp)" }], isError: true };
-    const entries = getContext(db, args.scope);
-    if (entries.length === 0) return { content: [{ type: "text", text: "(no context saved for this scope)" }] };
-    return { content: [{ type: "text", text: JSON.stringify(entries, null, 2) }] };
-  }
-
-  if (name === "pre_edit") {
-    if (!args.path) {
-      return { content: [{ type: "text", text: "error: path required" }], isError: true };
-    }
-    const sections = [];
-
-    // Rules
-    const rules = await listRules();
-    const matching = rules.filter((r) =>
-      r.globs.length > 0 && r.globs.some((g) => minimatch(args.path, g, { matchBase: false }))
-    );
-    if (matching.length > 0) {
-      const parts = await Promise.all(
-        matching.map(async (r) => {
-          const full = await getRule(r.name);
-          const head = `# rule: ${r.name}\n\n${r.description}\n\nGlobs: ${r.globs.join(", ")}\n\n---\n\n`;
-          return head + (full?.body ?? "");
-        })
-      );
-      sections.push(`## Rules\n\n${parts.join("\n\n---\n\n")}`);
-    }
-
-    // Saved context
-    if (db) {
-      const ctx = getContext(db, args.path);
-      if (ctx.length > 0) {
-        const ctxText = ctx.map((e) => `**${e.key}**: ${e.body}`).join("\n");
-        sections.push(`## Saved context\n\n${ctxText}`);
-      }
-    }
-
-    if (sections.length === 0) {
-      return { content: [{ type: "text", text: "(no rules or saved context for this path)" }] };
-    }
-    return { content: [{ type: "text", text: sections.join("\n\n---\n\n") }] };
-  }
-
-  return { content: [{ type: "text", text: `unknown tool: ${name}` }], isError: true };
+  return handler.handle(args);
 });
 
 const transport = new StdioServerTransport();

@@ -1,0 +1,3 @@
+interface PreEditArgs {
+  path: string;
+}

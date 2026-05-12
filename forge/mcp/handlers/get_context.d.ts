@@ -1,0 +1,3 @@
+interface GetContextArgs {
+  scope?: string;
+}

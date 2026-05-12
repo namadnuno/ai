@@ -1,0 +1,3 @@
+interface SearchFilesArgs {
+  pattern: string;
+}

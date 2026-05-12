@@ -1,0 +1,3 @@
+interface GetRuleArgs {
+  name: string;
+}
