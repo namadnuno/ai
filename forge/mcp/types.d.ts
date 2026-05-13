@@ -50,3 +50,21 @@ interface SearchResult {
   excerpt: string;
   rank: number;
 }
+
+interface FrontmatterResult {
+  meta: Record<string, string | string[]>;
+  body: string;
+}
+
+interface SyncStats {
+  indexed: number;
+  skipped: number;
+  deleted: number;
+  cached?: boolean;
+}
+
+interface ContextSummary {
+  scope: string;
+  key: string;
+  updated: number;
+}
