@@ -14,7 +14,9 @@ export class GetRuleHandler {
   };
 
   /** @param {Ctx} ctx */
-  constructor(ctx) { this.ctx = ctx; }
+  constructor(ctx) {
+    this.ctx = ctx;
+  }
 
   /** @param {GetRuleArgs} args @returns {Promise<ToolResult>} */
   async handle(args) {
@@ -23,7 +25,10 @@ export class GetRuleHandler {
     }
     const rule = await getRule(this.ctx.RULES_DIR, args.name);
     if (!rule) {
-      return { content: [{ type: "text", text: `error: rule '${args.name}' not found` }], isError: true };
+      return {
+        content: [{ type: "text", text: `error: rule '${args.name}' not found` }],
+        isError: true,
+      };
     }
     const head = `# ${rule.name}\n\n${rule.description}\n\nGlobs: ${rule.globs.join(", ") || "(none)"}\n\n---\n\n`;
     return { content: [{ type: "text", text: head + rule.body }] };

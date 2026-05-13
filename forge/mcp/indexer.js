@@ -100,21 +100,37 @@ export function syncIndex(root, db) {
   const del = db.prepare("DELETE FROM files WHERE path = ?");
   const setMeta = db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('last_synced', ?)");
 
-  let indexed = 0, skipped = 0, deleted = 0;
+  let indexed = 0,
+    skipped = 0,
+    deleted = 0;
 
   db.transaction(() => {
     for (const relPath of currentPaths) {
       let st;
-      try { st = statSync(join(root, relPath)); } catch { continue; }
+      try {
+        st = statSync(join(root, relPath));
+      } catch {
+        continue;
+      }
 
       const mtime = Math.floor(st.mtimeMs);
       const size = st.size;
       const row = getRow.get(relPath);
-      if (row && row.mtime === mtime && row.size === size) { skipped++; continue; }
+      if (row && row.mtime === mtime && row.size === size) {
+        skipped++;
+        continue;
+      }
 
       let buf;
-      try { buf = readFileSync(join(root, relPath)); } catch { continue; }
-      if (isBinary(buf)) { skipped++; continue; }
+      try {
+        buf = readFileSync(join(root, relPath));
+      } catch {
+        continue;
+      }
+      if (isBinary(buf)) {
+        skipped++;
+        continue;
+      }
 
       const content = buf.toString("utf8");
       upsert.run({ path: relPath, mtime, size, hash: sha256hex(content), content });
@@ -122,7 +138,10 @@ export function syncIndex(root, db) {
     }
 
     for (const { path } of db.prepare("SELECT path FROM files").all()) {
-      if (!currentPaths.has(path)) { del.run(path); deleted++; }
+      if (!currentPaths.has(path)) {
+        del.run(path);
+        deleted++;
+      }
     }
 
     setMeta.run(String(Date.now()));
@@ -133,12 +152,17 @@ export function syncIndex(root, db) {
 
 /** @param {import("better-sqlite3").Database} db @returns {string[]} */
 export function getAllPaths(db) {
-  return db.prepare("SELECT path FROM files ORDER BY path").all().map((r) => r.path);
+  return db
+    .prepare("SELECT path FROM files ORDER BY path")
+    .all()
+    .map((r) => r.path);
 }
 
 /** @param {import("better-sqlite3").Database} db @param {string} query @param {number} [limit] @returns {SearchResult[]} */
 export function searchContent(db, query, limit = 20) {
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT f.path,
            snippet(files_fts, 1, '[', ']', '...', 32) AS excerpt,
            rank
@@ -147,15 +171,19 @@ export function searchContent(db, query, limit = 20) {
     WHERE files_fts MATCH ?
     ORDER BY rank
     LIMIT ?
-  `).all(query, limit);
+  `,
+    )
+    .all(query, limit);
 }
 
 /** @param {import("better-sqlite3").Database} db @param {string} scope @param {string} key @param {string} body */
 export function saveContext(db, scope, key, body) {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO context (scope, key, body, updated) VALUES (?, ?, ?, ?)
     ON CONFLICT(scope, key) DO UPDATE SET body=excluded.body, updated=excluded.updated
-  `).run(scope, key, body, Date.now());
+  `,
+  ).run(scope, key, body, Date.now());
 }
 
 /** @param {import("better-sqlite3").Database} db @returns {ContextSummary[]} */
@@ -166,7 +194,9 @@ export function listContext(db) {
 /** @param {import("better-sqlite3").Database} db @param {string} [scope] @returns {ContextEntry[]} */
 export function getContext(db, scope) {
   if (scope) {
-    return db.prepare("SELECT key, body, updated FROM context WHERE scope = ? ORDER BY key").all(scope);
+    return db
+      .prepare("SELECT key, body, updated FROM context WHERE scope = ? ORDER BY key")
+      .all(scope);
   }
   return db.prepare("SELECT scope, key, body, updated FROM context ORDER BY scope, key").all();
 }

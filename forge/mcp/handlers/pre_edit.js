@@ -9,14 +9,21 @@ export class PreEditHandler {
       "Call before editing a file. Returns all matching rules (mandatory conventions) AND all saved context insights for that path — everything needed before touching the file, in one call.",
     inputSchema: {
       type: "object",
-      properties: { path: { type: "string", description: "File path relative to repo root (e.g. src/components/Foo.tsx)" } },
+      properties: {
+        path: {
+          type: "string",
+          description: "File path relative to repo root (e.g. src/components/Foo.tsx)",
+        },
+      },
       required: ["path"],
       additionalProperties: false,
     },
   };
 
   /** @param {Ctx} ctx */
-  constructor(ctx) { this.ctx = ctx; }
+  constructor(ctx) {
+    this.ctx = ctx;
+  }
 
   /** @param {PreEditArgs} args @returns {Promise<ToolResult>} */
   async handle(args) {
@@ -28,7 +35,8 @@ export class PreEditHandler {
 
     const rules = await listRules(RULES_DIR);
     const matching = rules.filter(
-      (r) => r.globs.length > 0 && r.globs.some((g) => minimatch(args.path, g, { matchBase: false }))
+      (r) =>
+        r.globs.length > 0 && r.globs.some((g) => minimatch(args.path, g, { matchBase: false })),
     );
     if (matching.length > 0) {
       const parts = await Promise.all(
@@ -36,7 +44,7 @@ export class PreEditHandler {
           const full = await getRule(RULES_DIR, r.name);
           const head = `# rule: ${r.name}\n\n${r.description}\n\nGlobs: ${r.globs.join(", ")}\n\n---\n\n`;
           return head + (full?.body ?? "");
-        })
+        }),
       );
       sections.push(`## Rules\n\n${parts.join("\n\n---\n\n")}`);
     }

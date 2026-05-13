@@ -9,7 +9,9 @@ export class RepoOverviewHandler {
   };
 
   /** @param {Ctx} ctx */
-  constructor(ctx) { this.ctx = ctx; }
+  constructor(ctx) {
+    this.ctx = ctx;
+  }
 
   /** @returns {Promise<ToolResult>} */
   async handle(_args) {
@@ -17,7 +19,10 @@ export class RepoOverviewHandler {
     if (content === null) {
       return {
         content: [
-          { type: "text", text: "(no overview yet — create .agent/overview.md or run ./.agent/analyze.sh)" },
+          {
+            type: "text",
+            text: "(no overview yet — create .agent/overview.md or run ./.agent/analyze.sh)",
+          },
         ],
       };
     }

@@ -1,19 +1,25 @@
 {
   "name": "forge-mcp",
   "version": "0.1.0",
-  "description": "Forge memory MCP server — exposes repo overview and rules to Claude sessions",
-  "type": "module",
   "private": true,
+  "description": "Forge memory MCP server — exposes repo overview and rules to Claude sessions",
   "bin": {
     "forge-mcp": "server.js"
   },
+  "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "lint": "oxlint .",
+    "fmt": "oxfmt ."
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
     "better-sqlite3": "^12.9.0",
     "minimatch": "^10.0.0"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.49.0",
+    "oxlint": "^1.64.0"
   },
   "engines": {
     "node": ">=18"

@@ -4,10 +4,7 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { resolve } from "node:path";
 import { openDb } from "./indexer.js";
 import { RepoOverviewHandler } from "./handlers/repo_overview.js";
@@ -49,14 +46,9 @@ const HANDLER_CLASSES = [
   PreEditHandler,
 ];
 
-const handlers = Object.fromEntries(
-  HANDLER_CLASSES.map((H) => [H.schema.name, new H(ctx)])
-);
+const handlers = Object.fromEntries(HANDLER_CLASSES.map((H) => [H.schema.name, new H(ctx)]));
 
-const server = new Server(
-  { name: "forge", version: "0.1.0" },
-  { capabilities: { tools: {} } }
-);
+const server = new Server({ name: "forge", version: "0.1.0" }, { capabilities: { tools: {} } });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: HANDLER_CLASSES.map((H) => H.schema),

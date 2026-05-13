@@ -48,9 +48,7 @@ export class SaveContextHandler {
     const { scope, key, body } = args;
     if (!scope || !key || !body) {
       return {
-        content: [
-          { type: "text", text: "error: scope, key, and body required" },
-        ],
+        content: [{ type: "text", text: "error: scope, key, and body required" }],
         isError: true,
       };
     }

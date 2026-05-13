@@ -9,7 +9,9 @@ export class ListRulesHandler {
   };
 
   /** @param {Ctx} ctx */
-  constructor(ctx) { this.ctx = ctx; }
+  constructor(ctx) {
+    this.ctx = ctx;
+  }
 
   /** @returns {Promise<ToolResult>} */
   async handle(_args) {
