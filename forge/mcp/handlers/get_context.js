@@ -8,24 +8,41 @@ export class GetContextHandler {
     inputSchema: {
       type: "object",
       properties: {
-        scope: { type: "string", description: "File path or '__project__'. Omit for all entries." },
+        scope: {
+          type: "string",
+          description: "File path or '__project__'. Omit for all entries.",
+        },
       },
       additionalProperties: false,
     },
   };
 
   /** @param {Ctx} ctx */
-  constructor(ctx) { this.ctx = ctx; }
+  constructor(ctx) {
+    this.ctx = ctx;
+  }
 
   /** @param {GetContextArgs} args @returns {ToolResult} */
   handle(args) {
     if (!this.ctx.db) {
-      return { content: [{ type: "text", text: "error: index unavailable (run npm install in .agent/mcp)" }], isError: true };
+      return {
+        content: [
+          {
+            type: "text",
+            text: "error: index unavailable (run npm install in .agent/mcp)",
+          },
+        ],
+        isError: true,
+      };
     }
     const entries = getContext(this.ctx.db, args.scope);
     if (entries.length === 0) {
-      return { content: [{ type: "text", text: "(no context saved for this scope)" }] };
+      return {
+        content: [{ type: "text", text: "(no context saved for this scope)" }],
+      };
     }
-    return { content: [{ type: "text", text: JSON.stringify(entries, null, 2) }] };
+    return {
+      content: [{ type: "text", text: JSON.stringify(entries, null, 2) }],
+    };
   }
 }

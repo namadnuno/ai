@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { createHash } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { mkdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const DB_RELATIVE = ".agent/index.db";
@@ -59,7 +59,9 @@ const SCHEMA = `
 
 /** @param {string} root @returns {import("better-sqlite3").Database} */
 export function openDb(root) {
-  const db = new Database(resolve(root, DB_RELATIVE));
+  const dbPath = resolve(root, DB_RELATIVE);
+  mkdirSync(dirname(dbPath), { recursive: true });
+  const db = new Database(dbPath);
   db.pragma("journal_mode = WAL");
   db.pragma("synchronous = NORMAL");
   db.pragma("temp_store = MEMORY");

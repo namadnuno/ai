@@ -25,8 +25,8 @@ const ROOT = process.env.FORGE_ROOT || process.cwd();
 let db = null;
 try {
   db = openDb(ROOT);
-} catch {
-  // better-sqlite3 unavailable or .agent/ missing — search tools disabled
+} catch (err) {
+  process.stderr.write(`forge-mcp: index unavailable — ${err.message}\n`);
 }
 
 const ctx = {
